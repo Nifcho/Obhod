@@ -24,7 +24,7 @@
     r.groups.forEach(g => r.pts.filter(p => p.grp === g).forEach(p => r.ordered.push(p)));
     for (const p of r.pts) {
       p.route = r.key; p.routeName = r.name;
-      p.shape = p.grp === 'Изгрев' ? 'sq' : (p.grp === 'Лозенец 91–95' ? 'dm' : 'ci');
+      p.shape = (p.grp === 'Изгрев' || p.grp === 'Изток 44–47') ? 'sq' : (p.grp === 'Лозенец 91–95' ? 'dm' : 'ci');
       ptById[p.id] = p;
     }
   }
@@ -178,7 +178,7 @@
 
   function iconFor(p) {
     const d = V.has(p.id);
-    const cls = ['pin', p.shape, d ? 'done' : '', S.sel === p.id ? 'sel' : '', (!d && nearInfo && nearInfo.p === p) ? 'near' : '', p.n.length > 2 ? 'n3' : ''].join(' ');
+    const cls = ['pin', p.shape, d ? 'done' : '', S.sel === p.id ? 'sel' : '', (!d && nearInfo && nearInfo.p === p) ? 'near' : '', p.n.length > 3 ? 'n5' : (p.n.length > 2 ? 'n3' : '')].join(' ');
     return L.divIcon({ className: '', html: `<div class="pinbox"><div class="${cls}"><span>${p.n}</span></div></div>`, iconSize: [32, 32], iconAnchor: [16, 16] });
   }
   function buildMarkers() {
@@ -353,7 +353,7 @@
     if (selected) { const x = el('button', 'x', 'Затвори ×'); x.type = 'button'; x.dataset.act = 'unselect'; lbl.append(x); }
     card.append(lbl);
     const hd = el('div', 'hd');
-    const num = el('span', 'num ' + p.shape + (done ? ' done' : ''), p.n);
+    const num = el('span', 'num ' + p.shape + (done ? ' done' : '') + (p.n.length > 3 ? ' long' : ''), p.n);
     const txt = el('div', 'txt'); txt.append(el('div', 'st', p.st || '—'), subEl(p, r.groups.length > 1, true));
     hd.append(num, txt);
     if (d != null && !done) hd.append(el('div', 'dist', fmtDist(d)));
@@ -369,7 +369,7 @@
     const li = el('li', 'row ' + p.shape + (V.has(p.id) ? ' done' : '') + (S.sel === p.id ? ' sel' : '')); li.dataset.id = p.id;
     const m = el('button', 'rowmain'); m.type = 'button'; m.dataset.act = 'select'; m.dataset.id = p.id;
     const txt = el('span', 'txt'); txt.append(el('span', 'st', p.st || '—'), subEl(p, withGroup));
-    m.append(el('span', 'num', p.n), txt);
+    m.append(el('span', 'num' + (p.n.length > 3 ? ' long' : ''), p.n), txt);
     const nav = el('a', 'nav'); setLink(nav, navUrl(p)); nav.dataset.nav = p.id; nav.setAttribute('aria-label', 'Навигация до точка ' + p.n); nav.innerHTML = ICON.nav;
     const ck = el('button', 'check'); ck.type = 'button'; ck.dataset.act = 'toggle'; ck.dataset.id = p.id;
     const d = V.has(p.id); ck.setAttribute('aria-pressed', String(d)); ck.setAttribute('aria-label', (d ? 'Върни точка ' : 'Минах точка ') + p.n); ck.innerHTML = d ? ICON.on : ICON.off;
