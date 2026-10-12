@@ -37,6 +37,7 @@
     server: new Map(Object.entries(LS.get('obhod.server', {}))),
     queue: LS.get('obhod.queue', []),
     drivers: LS.get('obhod.drivers', CFG.drivers || []),
+    navApp: LS.get('obhod.nav', ''), routeSeq: [], pendingNav: null,
     sel: null, lastSync: 0, syncErr: false, pos: null, geoErr: null, follow: false, buzzed: {}
   };
   let V = new Map();
@@ -136,14 +137,29 @@
     for (let i = 0; i < (p.g || 0); i++) s.append(el('i', 'dot g'));
     return s;
   }
-  const navUrl = p => `https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=${p.lat},${p.lon}`;
+  // ---------- navigation apps ----------
+  const IS_HUAWEI = /huawei|honor|harmonyos|hmscore/i.test(navigator.userAgent || '');
+  const NAV_APPS = {
+    google: { name: 'Google Maps', sub: 'Може маршрут през няколко точки', url: p => `https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=${p.lat},${p.lon}` },
+    waze: { name: 'Waze', sub: 'По една точка наведнъж', url: p => `https://waze.com/ul?ll=${p.lat},${p.lon}&navigate=yes` },
+    petal: { name: 'Petal Maps', sub: 'Картите на Huawei, по една точка наведнъж', url: p => `https://www.petalmaps.com/navigation/?daddr=${p.lat},${p.lon}&type=drive&coordinateType=0&utm_source=obhod` },
+    geo: { name: 'Друго приложение', sub: 'Телефонът пита с какво да отвори', url: p => `geo:${p.lat},${p.lon}?q=${p.lat},${p.lon}(${encodeURIComponent('Точка ' + p.n)})` }
+  };
+  const navOrder = () => IS_HUAWEI ? ['petal', 'waze', 'geo', 'google'] : ['google', 'waze', 'petal', 'geo'];
+  const navApp = () => NAV_APPS[S.navApp] ? S.navApp : null;
+  const navUrl = p => NAV_APPS[navApp() || 'google'].url(p);
   function routeUrl(list) {
     if (!list.length) return null;
+    if (navApp() && navApp() !== 'google') return navUrl(list[0]);
     const d = list[list.length - 1];
     let u = `https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=${d.lat},${d.lon}`;
     const w = list.slice(0, -1).map(p => `${p.lat},${p.lon}`).join('|');
     if (w) u += '&waypoints=' + encodeURIComponent(w);
     return u;
+  }
+  function setLink(a, url) {
+    a.href = url;
+    if (/^https?:/.test(url)) { a.target = '_blank'; a.rel = 'noopener'; } else { a.removeAttribute('target'); a.removeAttribute('rel'); }
   }
   let toastT = 0;
   function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 4200); }
@@ -298,9 +314,12 @@
         here = pool[bi]; seq.push(pool.splice(bi, 1)[0]);
       }
     } else seq = left.slice(0, 4);
+    S.routeSeq = seq;
     const a = $('#routeNext'), u = routeUrl(seq);
-    if (u) { a.href = u; a.removeAttribute('aria-disabled'); $('#routeTxt').textContent = seq.length > 1 ? `Маршрут: следващите ${seq.length}` : `Навигация до ${seq[0].n}`; }
+    const multi = seq.length > 1 && (!navApp() || navApp() === 'google');
+    if (u) { setLink(a, u); a.removeAttribute('aria-disabled'); $('#routeTxt').textContent = multi ? `Маршрут: следващите ${seq.length}` : `Навигация до т. ${seq[0].n}`; }
     else { a.removeAttribute('href'); a.setAttribute('aria-disabled', 'true'); $('#routeTxt').textContent = 'Всички са минати'; }
+    $('#navName').textContent = navApp() ? NAV_APPS[navApp()].name : 'не е избрано';
   }
   function subEl(p, withGroup, noDist) {
     const sub = el('span', 'sub');
@@ -343,7 +362,7 @@
     const acts = el('div', 'acts');
     const tg = el('button', 'btn' + (done ? '' : ' primary')); tg.type = 'button'; tg.dataset.act = 'toggle'; tg.dataset.id = p.id;
     tg.innerHTML = (done ? ICON.undo : ICON.on) + '<span></span>'; tg.lastChild.textContent = done ? 'Върни' : 'Минах';
-    const nv = el('a', 'btn'); nv.href = navUrl(p); nv.target = '_blank'; nv.rel = 'noopener'; nv.innerHTML = ICON.nav + '<span>Навигация</span>';
+    const nv = el('a', 'btn'); setLink(nv, navUrl(p)); nv.dataset.nav = p.id; nv.innerHTML = ICON.nav + '<span>Навигация</span>';
     acts.append(tg, nv); card.append(acts);
   }
   function rowEl(p, withGroup) {
@@ -351,7 +370,7 @@
     const m = el('button', 'rowmain'); m.type = 'button'; m.dataset.act = 'select'; m.dataset.id = p.id;
     const txt = el('span', 'txt'); txt.append(el('span', 'st', p.st || '—'), subEl(p, withGroup));
     m.append(el('span', 'num', p.n), txt);
-    const nav = el('a', 'nav'); nav.href = navUrl(p); nav.target = '_blank'; nav.rel = 'noopener'; nav.setAttribute('aria-label', 'Навигация до точка ' + p.n); nav.innerHTML = ICON.nav;
+    const nav = el('a', 'nav'); setLink(nav, navUrl(p)); nav.dataset.nav = p.id; nav.setAttribute('aria-label', 'Навигация до точка ' + p.n); nav.innerHTML = ICON.nav;
     const ck = el('button', 'check'); ck.type = 'button'; ck.dataset.act = 'toggle'; ck.dataset.id = p.id;
     const d = V.has(p.id); ck.setAttribute('aria-pressed', String(d)); ck.setAttribute('aria-label', (d ? 'Върни точка ' : 'Минах точка ') + p.n); ck.innerHTML = d ? ICON.on : ICON.off;
     li.append(m, nav, ck);
@@ -428,6 +447,39 @@
   }
   function setSheet(state) { $('#sheet').dataset.state = state; $('#grab').setAttribute('aria-label', state === 'full' ? 'Скрий списъка' : 'Покажи списъка'); setTimeout(() => map.invalidateSize(), 260); }
 
+  // navigation: ask once which app to use
+  function openUrl(url) {
+    const a = document.createElement('a'); setLink(a, url);
+    document.body.append(a); a.click(); a.remove();
+  }
+  function openNavPicker(pending) {
+    S.pendingNav = pending || null;
+    const box = $('#navApps'); box.textContent = '';
+    for (const k of navOrder()) {
+      const app = NAV_APPS[k];
+      const b = el('button', 'navapp'); b.type = 'button'; b.setAttribute('aria-pressed', String(S.navApp === k));
+      b.append(el('b', null, app.name));
+      const sub = (IS_HUAWEI && k === 'petal') ? 'Препоръчано за този телефон' : app.sub;
+      if (sub) b.append(el('span', null, sub));
+      b.addEventListener('click', () => chooseNav(k));
+      box.append(b);
+    }
+    $('#navModal').hidden = false;
+  }
+  function chooseNav(k) {
+    S.navApp = k; LS.set('obhod.nav', k); $('#navModal').hidden = true;
+    const pend = S.pendingNav; S.pendingNav = null;
+    refresh();
+    if (pend === 'route') { const u = routeUrl(S.routeSeq); if (u) openUrl(u); }
+    else if (pend && ptById[pend]) openUrl(navUrl(ptById[pend]));
+    else toast('Навигация с ' + NAV_APPS[k].name + '.');
+  }
+  document.addEventListener('click', e => {
+    const n = e.target.closest('[data-nav],#routeNext');
+    if (n && !navApp()) { e.preventDefault(); openNavPicker(n.id === 'routeNext' ? 'route' : n.dataset.nav); }
+  }, true);
+  $('#navModal').addEventListener('click', e => { if (e.target.id === 'navModal') $('#navModal').hidden = true; });
+
   document.addEventListener('click', e => {
     const t = e.target.closest('[data-act],[data-route],[data-f],[data-s]');
     if (!t) return;
@@ -441,6 +493,7 @@
     if (act === 'toggle') toggle(t.dataset.id);
     else if (act === 'select') select(t.dataset.id, true);
     else if (act === 'unselect') select(null, false);
+    else if (act === 'navchange') openNavPicker(null);
   });
   $('#grab').addEventListener('click', () => setSheet($('#sheet').dataset.state === 'full' ? 'peek' : 'full'));
   $('#locBtn').addEventListener('click', () => {

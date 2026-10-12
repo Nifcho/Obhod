@@ -68,6 +68,7 @@
         <button type="button" class="btn danger" id="resetBtn">Нов курс</button>
       </div>
       <ol class="list" id="list"></ol>
+      <p class="navset">Навигация с: <b id="navName">не е избрано</b> <button type="button" class="link" data-act="navchange">Смени</button></p>
       <p class="foot">Отметките се записват в таблицата „Обход на точките – отметки“. Точките са по картите на Екобулпак.</p>
     </div>
   </section>
@@ -82,6 +83,14 @@
       <label for="otherName">Друго име</label>
       <div class="row"><input id="otherName" autocomplete="name" placeholder="Име и фамилия"><button class="btn primary" type="submit">Запази</button></div>
     </form>
+  </div>
+</div>
+
+<div class="modal" id="navModal" hidden>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="navTitle">
+    <h2 id="navTitle">С какво да навигираме?</h2>
+    <p class="muted">Изборът се запомня на този телефон. Сменя се от „Навигация с…“ в списъка.</p>
+    <div class="navapps" id="navApps"></div>
   </div>
 </div>
 
