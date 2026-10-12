@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Обход на точките</title>
+<meta name="theme-color" content="#17663f">
+<meta name="description" content="Контейнерни точки по маршрути: карта, местоположение и отметки „Минах“.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Обход">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="lib/leaflet/leaflet.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <header class="bar">
+    <nav class="routes" id="routes" role="tablist" aria-label="Маршрут"></nav>
+    <button class="who" id="whoBtn" type="button" aria-label="Смени шофьора">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
+      <span id="whoName">Кой си?</span>
+    </button>
+  </header>
+
+  <main class="mapwrap">
+    <div id="map" aria-label="Карта на точките"></div>
+    <div class="sync" id="sync" data-mode="local"><i></i><span id="syncTxt"></span></div>
+    <div class="fabs">
+      <button type="button" class="fab" id="locBtn" aria-label="Покажи къде съм" data-state="off">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/></svg>
+      </button>
+      <button type="button" class="fab" id="fitBtn" aria-label="Покажи всички останали точки">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+      </button>
+    </div>
+  </main>
+
+  <section class="sheet" id="sheet" data-state="peek">
+    <button type="button" class="grab" id="grab" aria-label="Покажи списъка"><i></i></button>
+    <div class="summary">
+      <div class="count"><b id="doneN">0</b> от <span id="totN">0</span> минати</div>
+      <div class="yel"><i class="dot y"></i>Жълти: <b id="yelLeft">0</b> остават от <span id="yelTot">0</span></div>
+      <div class="prog"><i id="barFill"></i></div>
+    </div>
+    <div class="card" id="card"></div>
+    <div class="sheet-body" id="sheetBody">
+      <div class="tools">
+        <div class="seg" role="group" aria-label="Покажи">
+          <button type="button" class="chip" data-f="left" id="fLeft">Остават</button>
+          <button type="button" class="chip" data-f="all" id="fAll">Всички</button>
+          <button type="button" class="chip" data-f="done" id="fDone">Минати</button>
+        </div>
+        <div class="seg" role="group" aria-label="Подреди">
+          <button type="button" class="chip" data-s="num">По номер</button>
+          <button type="button" class="chip" data-s="near">Най-близки</button>
+        </div>
+      </div>
+      <div class="tools">
+        <a class="btn" id="routeNext" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l18-8-8 18-2-8-8-2z"/></svg>
+          <span id="routeTxt">Маршрут</span>
+        </a>
+        <button type="button" class="btn danger" id="resetBtn">Нов курс</button>
+      </div>
+      <ol class="list" id="list"></ol>
+      <p class="foot">Отметките се записват в таблицата „Обход на точките – отметки“. Точките са по картите на Екобулпак.</p>
+    </div>
+  </section>
+</div>
+
+<div class="modal" id="whoModal" hidden>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="whoTitle">
+    <h2 id="whoTitle">Кой кара днес?</h2>
+    <p class="muted">Името се записва до всяка отметка. Избира се веднъж на този телефон.</p>
+    <div class="names" id="names"></div>
+    <form class="other" id="otherForm">
+      <label for="otherName">Друго име</label>
+      <div class="row"><input id="otherName" autocomplete="name" placeholder="Име и фамилия"><button class="btn primary" type="submit">Запази</button></div>
+    </form>
+  </div>
+</div>
+
+<div class="modal" id="confirmModal" hidden>
+  <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle">
+    <h2 id="confirmTitle">Нов курс</h2>
+    <p id="confirmTxt"></p>
+    <div class="row end">
+      <button class="btn" type="button" id="confirmNo">Отказ</button>
+      <button class="btn solid-danger" type="button" id="confirmYes">Изчисти</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="lib/leaflet/leaflet.js"></script>
+<script src="config.js"></script>
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
