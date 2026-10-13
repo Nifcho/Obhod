@@ -209,18 +209,38 @@
   map.on('zoomend', zoomClass); zoomClass();
 
   // ---------- location ----------
-  let wakeLock = null;
-  async function keepAwake(on) {
+  // Screen stays on the whole time the app is open.
+  // Wake Lock where the browser has it; otherwise a tiny silent looping video (started on the first tap).
+  let wakeLock = null, awakeVideo = null;
+  async function keepAwake() {
+    if (document.visibilityState !== 'visible') return;
+    if ('wakeLock' in navigator) {
+      if (wakeLock) return;
+      try {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; if (document.visibilityState === 'visible') setTimeout(keepAwake, 1000); });
+        return;
+      } catch (e) { wakeLock = null; }
+    }
     try {
-      if (on && 'wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); }
-      if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
-    } catch (e) { wakeLock = null; }
+      if (!awakeVideo) {
+        awakeVideo = document.createElement('video');
+        for (const [src, type] of [['media/keepawake.mp4', 'video/mp4'], ['media/keepawake.webm', 'video/webm']]) {
+          const s = document.createElement('source'); s.src = src; s.type = type; awakeVideo.append(s);
+        }
+        awakeVideo.muted = true; awakeVideo.loop = true;
+        awakeVideo.setAttribute('playsinline', ''); awakeVideo.setAttribute('muted', '');
+        awakeVideo.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:0;top:0';
+        document.body.append(awakeVideo);
+      }
+      if (awakeVideo.paused) await awakeVideo.play();
+    } catch (e) {}
   }
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.follow) keepAwake(true); });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') keepAwake(); });
+  ['pointerdown', 'touchend', 'click'].forEach(ev => document.addEventListener(ev, () => { if (!wakeLock && (!awakeVideo || awakeVideo.paused)) keepAwake(); }, { passive: true }));
 
   function setFollow(on) {
     S.follow = on;
-    keepAwake(on);
     if (on && S.pos) map.setView([S.pos.lat, S.pos.lon], Math.max(map.getZoom(), 17), { animate: true });
     renderLocBtn();
   }
@@ -502,7 +522,7 @@
       startGeo(); return;
     }
     setFollow(!S.follow);
-    if (S.follow) toast('Картата следва колата. Екранът няма да изгасва.');
+    if (S.follow) toast('Картата следва колата.');
   });
   $('#fitBtn').addEventListener('click', () => {
     const left = cur().pts.filter(p => !V.has(p.id));
@@ -552,6 +572,7 @@
   setTimeout(() => { map.invalidateSize(); const left = cur().pts.filter(p => !V.has(p.id)); fitTo(left.length ? left : cur().pts); }, 60);
   window.addEventListener('resize', () => map.invalidateSize());
   startGeo();
+  keepAwake();
   if (API) sync();
   if (!S.name) openWho();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {

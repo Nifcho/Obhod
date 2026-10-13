@@ -1,9 +1,9 @@
 // Офлайн кеш за приложението и прегледаните части от картата.
-const VERSION = 'obhod-v3';
+const VERSION = 'obhod-v4';
 const SHELL = [
   './', './index.html', './styles.css', './app.js', './data.js', './config.js',
   './manifest.webmanifest', './lib/leaflet/leaflet.js', './lib/leaflet/leaflet.css',
-  './icons/icon-192.png', './icons/favicon-32.png'
+  './icons/icon-192.png', './icons/favicon-32.png', './media/keepawake.mp4', './media/keepawake.webm'
 ];
 const TILE_CACHE = 'obhod-tiles';
 const TILE_LIMIT = 800;
