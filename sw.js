@@ -1,5 +1,5 @@
 // Офлайн кеш за приложението и прегледаните части от картата.
-const VERSION = 'obhod-v7';
+const VERSION = 'obhod-v8';
 const SHELL = [
   './', './index.html', './styles.css', './app.js', './data.js', './config.js',
   './manifest.webmanifest', './lib/leaflet/leaflet.js', './lib/leaflet/leaflet.css',
@@ -45,8 +45,10 @@ self.addEventListener('fetch', e => {
 
   if (url.origin === self.location.origin) {
     // Първо мрежата, за да идват новите версии веднага; кешът е резерва без връзка.
+    // no-cache: винаги пита сървъра дали има нова версия (иначе браузърът държи старата до 10 мин.)
+    const net = req.mode === 'navigate' ? fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' }) : fetch(req, { cache: 'no-cache' });
     e.respondWith(
-      fetch(req).then(r => {
+      net.then(r => {
         if (r.ok) { const copy = r.clone(); caches.open(VERSION).then(c => c.put(req, copy)); }
         return r;
       }).catch(() => caches.match(req).then(h => h || caches.match('./index.html')))
