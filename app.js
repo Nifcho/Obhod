@@ -12,6 +12,7 @@
   };
   const ICON = {
     nav: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l18-8-8 18-2-8-8-2z"/></svg>',
+    tel: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2z"/></svg>',
     off: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/></svg>',
     on: '<svg viewBox="0 0 24 24" aria-hidden="true" style="stroke-width:2.6"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
     undo: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/></svg>'
@@ -23,7 +24,7 @@
     r.ordered = [];
     r.groups.forEach(g => r.pts.filter(p => p.grp === g).forEach(p => r.ordered.push(p)));
     for (const p of r.pts) {
-      p.route = r.key; p.routeName = r.name;
+      p.route = r.key; p.routeName = r.name; p.kind = r.kind || ''; p.ll = p.lat != null && p.lon != null;
       p.shape = (p.grp === 'Изгрев' || p.grp === 'Изток 44–47') ? 'sq' : (p.grp === 'Лозенец 91–95' ? 'dm' : 'ci');
       ptById[p.id] = p;
     }
@@ -122,6 +123,13 @@
     return d.toDateString() === n.toDateString() ? hm : d.toLocaleDateString('bg-BG', { day: '2-digit', month: '2-digit' }) + ' ' + hm;
   }
   const plural = (n, one, many) => (n === 1 ? one : many);
+  function fmtPhone(s) {
+    let d = String(s).replace(/[^0-9+]/g, '');
+    if (d.startsWith('+359')) d = '0' + d.slice(4);
+    if (/^08\d{8}$/.test(d)) return d.replace(/^(\d{4})(\d{3})(\d{3})$/, '$1 $2 $3');
+    if (/^02\d{7}$/.test(d)) return d.replace(/^(\d{2})(\d{3})(\d{4})$/, '$1 $2 $3');
+    return d;
+  }
   function contTxt(p) {
     if (p.y == null && p.g == null) return 'бройката не се вижда';
     const a = [];
@@ -131,6 +139,7 @@
   }
   function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function dotsEl(p) {
+    if (p.y == null && p.g == null && p.kind === 'turg') return null;
     const s = el('span', 'dots'); s.title = contTxt(p); s.setAttribute('aria-label', contTxt(p));
     if (p.y == null && p.g == null) { s.textContent = '?'; return s; }
     for (let i = 0; i < (p.y || 0); i++) s.append(el('i', 'dot y'));
@@ -139,16 +148,18 @@
   }
   // ---------- navigation apps ----------
   const IS_HUAWEI = /huawei|honor|harmonyos|hmscore/i.test(navigator.userAgent || '');
+  const addrQ = p => encodeURIComponent((p.addr || p.st) + ', София');
   const NAV_APPS = {
-    google: { name: 'Google Maps', sub: 'Може маршрут през няколко точки', url: p => `https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=${p.lat},${p.lon}` },
-    waze: { name: 'Waze', sub: 'По една точка наведнъж', url: p => `https://waze.com/ul?ll=${p.lat},${p.lon}&navigate=yes` },
-    petal: { name: 'Petal Maps', sub: 'Картите на Huawei, по една точка наведнъж', url: p => `https://www.petalmaps.com/navigation/?daddr=${p.lat},${p.lon}&type=drive&coordinateType=0&utm_source=obhod` },
-    geo: { name: 'Друго приложение', sub: 'Телефонът пита с какво да отвори', url: p => `geo:${p.lat},${p.lon}?q=${p.lat},${p.lon}(${encodeURIComponent('Точка ' + p.n)})` }
+    google: { name: 'Google Maps', sub: 'Може маршрут през няколко точки', url: p => `https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=${p.ll ? p.lat + ',' + p.lon : addrQ(p)}` },
+    waze: { name: 'Waze', sub: 'По една точка наведнъж', url: p => p.ll ? `https://waze.com/ul?ll=${p.lat},${p.lon}&navigate=yes` : `https://waze.com/ul?q=${addrQ(p)}&navigate=yes` },
+    petal: { name: 'Petal Maps', sub: 'Картите на Huawei, по една точка наведнъж', url: p => p.ll ? `https://www.petalmaps.com/navigation/?daddr=${p.lat},${p.lon}&type=drive&coordinateType=0&utm_source=obhod` : `geo:0,0?q=${addrQ(p)}` },
+    geo: { name: 'Друго приложение', sub: 'Телефонът пита с какво да отвори', url: p => p.ll ? `geo:${p.lat},${p.lon}?q=${p.lat},${p.lon}(${encodeURIComponent((p.kind === 'turg' ? '' : 'Точка ') + (p.kind === 'turg' ? p.st : p.n))})` : `geo:0,0?q=${addrQ(p)}` }
   };
   const navOrder = () => IS_HUAWEI ? ['petal', 'waze', 'geo', 'google'] : ['google', 'waze', 'petal', 'geo'];
   const navApp = () => NAV_APPS[S.navApp] ? S.navApp : null;
   const navUrl = p => NAV_APPS[navApp() || 'google'].url(p);
   function routeUrl(list) {
+    list = list.filter(p => p.ll);
     if (!list.length) return null;
     if (navApp() && navApp() !== 'google') return navUrl(list[0]);
     const d = list[list.length - 1];
@@ -184,6 +195,7 @@
   function buildMarkers() {
     markerLayer.clearLayers(); markers = {};
     for (const p of cur().pts) {
+      if (!p.ll) continue;
       const m = L.marker([p.lat, p.lon], { icon: iconFor(p), keyboard: false });
       m.on('click', () => select(p.id, false));
       m.addTo(markerLayer); markers[p.id] = m;
@@ -198,6 +210,7 @@
   }
   function sheetPad() { const sh = $('#sheet'); return window.innerWidth >= 900 ? 40 : Math.min(sh.getBoundingClientRect().height, window.innerHeight * 0.5) + 20; }
   function fitTo(pts, includeFar) {
+    pts = pts.filter(p => p.ll);
     if (!includeFar) { const near = pts.filter(p => !p.far); if (near.length) pts = near; }
     if (!pts.length) return;
     const b = L.latLngBounds(pts.map(p => [p.lat, p.lon]));
@@ -287,7 +300,7 @@
   function nearestRemaining() {
     if (!S.pos) return null;
     let best = null, bd = Infinity;
-    for (const p of cur().pts) { if (V.has(p.id)) continue; const d = distM(S.pos, p); if (d < bd) { bd = d; best = p; } }
+    for (const p of cur().pts) { if (V.has(p.id) || !p.ll) continue; const d = distM(S.pos, p); if (d < bd) { bd = d; best = p; } }
     return best ? { p: best, d: bd } : null;
   }
   function renderRoutes() {
@@ -323,11 +336,15 @@
     $('#barFill').style.width = (tot ? done / tot * 100 : 0) + '%';
     const yt = r.pts.reduce((s, p) => s + (p.y || 0), 0), yl = r.pts.filter(p => !V.has(p.id)).reduce((s, p) => s + (p.y || 0), 0);
     $('#yelTot').textContent = yt; $('#yelLeft').textContent = yl;
+    const hasY = r.pts.some(p => p.y != null);
+    $('.yel').hidden = !hasY;
+    $('#dayLbl').hidden = !r.day; $('#dayLbl').textContent = r.day || '';
     $('#resetBtn').disabled = !done;
     // route through next remaining points: nearest-first from my position, else by number
-    const left = r.ordered.filter(p => !V.has(p.id));
+    const left = r.ordered.filter(p => !V.has(p.id) && p.ll);
     let seq = [];
-    if (S.pos && left.length) {
+    if (r.kind === 'turg') seq = left.slice(0, 4);
+    else if (S.pos && left.length) {
       let here = S.pos; const pool = left.slice();
       while (seq.length < 4 && pool.length) {
         let bi = 0, bd = Infinity; pool.forEach((p, i) => { const d = distM(here, p); if (d < bd) { bd = d; bi = i; } });
@@ -337,17 +354,20 @@
     S.routeSeq = seq;
     const a = $('#routeNext'), u = routeUrl(seq);
     const multi = seq.length > 1 && (!navApp() || navApp() === 'google');
-    if (u) { setLink(a, u); a.removeAttribute('aria-disabled'); $('#routeTxt').textContent = multi ? `Маршрут: следващите ${seq.length}` : `Навигация до т. ${seq[0].n}`; }
+    if (u) { setLink(a, u); a.removeAttribute('aria-disabled'); $('#routeTxt').textContent = multi ? `Маршрут: следващите ${seq.length}` : (r.kind === 'turg' ? `Навигация до ${seq[0].st}` : `Навигация до т. ${seq[0].n}`); }
     else { a.removeAttribute('href'); a.setAttribute('aria-disabled', 'true'); $('#routeTxt').textContent = 'Всички са минати'; }
     $('#navName').textContent = navApp() ? NAV_APPS[navApp()].name : 'не е избрано';
   }
   function subEl(p, withGroup, noDist) {
     const sub = el('span', 'sub');
-    sub.append(dotsEl(p));
+    const dt = dotsEl(p); if (dt) sub.append(dt);
     if (withGroup) sub.append(el('span', null, p.grp));
+    if (p.tag) sub.append(el('span', 'tag', p.tag));
+    if (p.ph && p.ph.length) { const t = el('span', 'telmark'); t.innerHTML = ICON.tel; t.title = 'Има телефон'; sub.append(t); }
+    if (!p.ll) sub.append(el('span', 'noll', 'без точка на картата'));
     const v = V.get(p.id);
     if (v) sub.append(el('span', 'when', 'Минато ' + fmtWhen(v.at) + (v.by ? ' · ' + (v.by === S.name ? 'ти' : v.by) : '')));
-    else if (S.pos && !noDist) sub.append(el('span', 'd', fmtDist(distM(S.pos, p))));
+    else if (S.pos && !noDist && p.ll) sub.append(el('span', 'd', fmtDist(distM(S.pos, p))));
     return sub;
   }
   function renderCard() {
@@ -356,6 +376,7 @@
     nearInfo = nearestRemaining();
     let p = null, label = '', d = null, selected = false;
     if (S.sel && ptById[S.sel] && ptById[S.sel].route === S.route) { p = ptById[S.sel]; label = 'Избрана точка'; selected = true; }
+    else if (r.kind === 'turg') { p = r.ordered.find(q => !V.has(q.id)) || null; label = 'Следващ по наряда'; }
     else if (nearInfo) { p = nearInfo.p; label = 'Най-близо'; }
     else { p = r.ordered.find(q => !V.has(q.id)) || null; label = 'Следваща'; }
     if (!p) {
@@ -363,7 +384,7 @@
       card.append(el('div', 'empty-card', 'Всички точки в маршрута са минати. Натиснете „Нов курс“ преди следващия обход.'));
       return;
     }
-    if (S.pos) d = distM(S.pos, p);
+    if (S.pos && p.ll) d = distM(S.pos, p);
     const done = V.has(p.id);
     const here = !done && d != null && d <= 30 && (S.pos.acc || 99) <= 50;
     card.className = 'card' + (here ? ' here' : '') + (done ? ' done' : '');
@@ -379,6 +400,15 @@
     if (d != null && !done) hd.append(el('div', 'dist', fmtDist(d)));
     card.append(hd);
     if (p.note) card.append(el('p', 'note', p.note));
+    if (p.ph && p.ph.length) {
+      const ph = el('div', 'phones');
+      for (const [lbl2, num2] of p.ph) {
+        const a = el('a', 'btn tel'); a.href = 'tel:' + num2.replace(/[^+0-9]/g, '');
+        a.innerHTML = ICON.tel + '<span></span>'; a.lastChild.textContent = lbl2 + ' · ' + fmtPhone(num2);
+        ph.append(a);
+      }
+      card.append(ph);
+    }
     const acts = el('div', 'acts');
     const tg = el('button', 'btn' + (done ? '' : ' primary')); tg.type = 'button'; tg.dataset.act = 'toggle'; tg.dataset.id = p.id;
     tg.innerHTML = (done ? ICON.undo : ICON.on) + '<span></span>'; tg.lastChild.textContent = done ? 'Върни' : 'Минах';
@@ -415,7 +445,7 @@
     }
     const multi = r.groups.length > 1;
     if (S.sort === 'near' && S.pos) {
-      pts.slice().sort((a, b) => distM(S.pos, a) - distM(S.pos, b)).forEach(p => ul.append(rowEl(p, multi)));
+      pts.slice().sort((a, b) => (a.ll ? distM(S.pos, a) : 1e12) - (b.ll ? distM(S.pos, b) : 1e12)).forEach(p => ul.append(rowEl(p, multi)));
       return;
     }
     for (const g of r.groups) {
@@ -428,7 +458,7 @@
     if (!S.pos) return;
     document.querySelectorAll('.row').forEach(li => {
       const p = ptById[li.dataset.id]; const d = li.querySelector('.d');
-      if (p && d) d.textContent = fmtDist(distM(S.pos, p));
+      if (p && d && p.ll) d.textContent = fmtDist(distM(S.pos, p));
     });
   }
   function refresh() {
@@ -444,7 +474,7 @@
       const p = ptById[id];
       if (fromList) {
         if (window.innerWidth < 900) setSheet('peek');
-        map.setView([p.lat, p.lon], Math.max(map.getZoom(), 17), { animate: true });
+        if (p.ll) map.setView([p.lat, p.lon], Math.max(map.getZoom(), 17), { animate: true });
         if (S.follow) setFollow(false);
       }
     }
