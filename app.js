@@ -239,10 +239,17 @@
     const cat = new Map();
     for (const r of catRows) { const k = normName(r.name); if (k && !cat.has(k)) cat.set(k, r); }
     for (const r of catRows) for (const a of (r.alias || '').split(/[;\n]+/)) { const k = normName(a); if (k && !cat.has(k)) cat.set(k, r); }
-    return { src: 'sheet', at: Number(raw.at) || Date.now(), days: tabs.map(t => ({ name: t.name, pts: buildDay(t.items, cat) })) };
+    return { src: 'sheet', at: Number(raw.at) || Date.now(), days: withWeek(tabs.map(t => ({ name: t.name, pts: buildDay(t.items, cat) }))) };
+  }
+  // Винаги се показват всички дни от седмицата; листовете от таблицата ги попълват.
+  const WEEK_ORDER = ['понеделник', 'вторник', 'сряда', 'четвъртък', 'петък', 'събота', 'неделя'];
+  function withWeek(days) {
+    const out = WEEK_ORDER.map(wd => days.find(x => normName(x.name) === wd) || { name: wd[0].toUpperCase() + wd.slice(1), pts: [] });
+    for (const d of days) if (out.indexOf(d) < 0) out.push(d);
+    return out;
   }
   let NAR = null, narSig = '', narBusy = false, narLast = 0, narErr = false, started = false;
-  function builtinNariad() { return { src: 'builtin', at: 0, days: TURG_BUILTIN.length ? [{ name: 'Сряда', pts: TURG_BUILTIN }] : [] }; }
+  function builtinNariad() { return { src: 'builtin', at: 0, days: withWeek(TURG_BUILTIN.length ? [{ name: 'Сряда', pts: TURG_BUILTIN }] : []) }; }
   const dayOf = name => NAR && NAR.days.find(d => d.name === name);
   function todayDay() {
     if (!NAR) return null;
@@ -527,15 +534,16 @@
       b.title = d.name + ' · ' + d.pts.length + ' ' + plural(d.pts.length, 'обект', 'обекта');
       box.append(b);
     }
-    const st = el('button', 'stamp'); st.type = 'button'; st.dataset.act = 'nariad';
-    if (!API) st.textContent = '';
-    else if (NAR.src !== 'sheet') st.textContent = narErr === 'old' ? 'Вграден списък' : (narBusy ? 'Зареждам…' : 'Вграден списък ↻');
-    else st.textContent = (narErr === true ? 'Без връзка · ' : '↻ ') + fmtWhen(NAR.at);
-    st.title = 'Обнови наряда от таблицата';
-    box.append(st);
     const name = S.turgDay || '';
-    lbl.textContent = name ? 'Наряд ' + name.toLowerCase() + (today && name !== today ? ' · не е днешният' : '') : 'Няма наряд';
-    lbl.classList.toggle('warn', !!(today && name && name !== today));
+    const warn = !!(today && name && name !== today);
+    const txt = el('span', 'daytxt', warn ? 'Не е днешният ден' : (name ? 'Наряд ' + name.toLowerCase() : 'Няма наряд'));
+    const st = el('button', 'stamp'); st.type = 'button'; st.dataset.act = 'nariad';
+    st.title = 'Обнови наряда от таблицата';
+    if (!API) st.hidden = true;
+    else if (NAR.src !== 'sheet') st.textContent = narBusy ? '↻ …' : '↻ вграден';
+    else st.textContent = (narErr === true ? '↻ без връзка ' : '↻ ') + fmtWhen(NAR.at);
+    lbl.textContent = ''; lbl.append(txt, st);
+    lbl.classList.toggle('warn', warn);
   }
   function subEl(p, withGroup, noDist) {
     const sub = el('span', 'sub');
