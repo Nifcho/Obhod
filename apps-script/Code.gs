@@ -10,11 +10,18 @@
  *   „Отметки“  – текущо минатите точки (по един ред на точка)
  *   „История“  – всяко действие: минах, върнах, нов курс
  *   „Шофьори“  – имената, които приложението предлага (може да се редактира)
+ *   „Търговски обекти“ – обектите с координати, адрес, телефон и бележка
+ *   „Наряд …“  – по един лист на ден (напр. „Наряд Понеделник“): обектите в реда на обхода
+ *
+ * След промяна на този код: Внедряване → Управление на внедряванията → молив →
+ * Версия: Нова версия → Внедряване. Адресът /exec остава същият.
  */
 
 var SHEET_STATE = 'Отметки';
 var SHEET_LOG = 'История';
 var SHEET_DRIVERS = 'Шофьори';
+var SHEET_OBJECTS = 'Търговски обекти';
+var NARIAD_PREFIX = 'Наряд';
 
 function doGet(e) {
   return respond_(handle_(e && e.parameter ? e.parameter : {}));
@@ -54,6 +61,7 @@ function handle_(p) {
     }
     out.visits = readState_(ss);
     out.drivers = readDrivers_(ss);
+    if (p.action === 'nariad' || p.nariad) out.nariad = readNariad_(ss);
     out.now = Date.now();
   } catch (err) {
     out.ok = false;
@@ -160,4 +168,20 @@ function readDrivers_(ss) {
   return sh.getRange(2, 1, n, 1).getValues()
     .map(function (r) { return String(r[0] || '').trim(); })
     .filter(function (s) { return s; });
+}
+
+// Листовете с наряди и обектите – връщат се както се виждат в таблицата;
+// приложението само намира колоните по заглавията им.
+function readNariad_(ss) {
+  var tabs = [];
+  var sheets = ss.getSheets();
+  for (var i = 0; i < sheets.length; i++) {
+    var sh = sheets[i];
+    var name = sh.getName();
+    if (name !== SHEET_OBJECTS && name.indexOf(NARIAD_PREFIX) !== 0) continue;
+    var lr = sh.getLastRow(), lc = Math.min(sh.getLastColumn(), 12);
+    var values = (lr > 0 && lc > 0) ? sh.getRange(1, 1, lr, lc).getDisplayValues() : [];
+    tabs.push({ name: name, values: values });
+  }
+  return { tabs: tabs, at: Date.now() };
 }

@@ -90,6 +90,13 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
 .count b { font-size: 24px; color: var(--accent); }
 .yel { justify-self: end; display: inline-flex; align-items: center; gap: 6px; font: 500 14px var(--f-cond); color: var(--muted); font-variant-numeric: tabular-nums; }
 .yel b { color: var(--ink); }
+.days { grid-column: 1 / -1; display: flex; align-items: center; gap: 4px; overflow-x: auto; scrollbar-width: none; padding: 2px 0 6px; }
+.days::-webkit-scrollbar { display: none; }
+.chip.day { flex: none; min-height: 36px; min-width: 44px; padding: 0 10px; position: relative; }
+.chip.day.today::after { content: ""; position: absolute; left: 50%; bottom: 3px; width: 5px; height: 5px; margin-left: -2.5px; border-radius: 50%; background: var(--sel); }
+.chip.day.none { opacity: .5; }
+.stamp { margin-left: auto; flex: none; border: 0; background: none; padding: 8px 2px 8px 8px; color: var(--muted); font: 500 12.5px var(--f-cond); cursor: pointer; white-space: nowrap; }
+#dayLbl.warn { color: var(--sel); font-weight: 600; }
 .prog { grid-column: 1 / -1; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; margin-top: 4px; }
 .prog i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s ease; }
 .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }

@@ -44,13 +44,23 @@
   let V = new Map();
   const cur = () => byKey[S.route];
 
+  // Търговските отметки важат за една смяна: от SHIFT_H часа до SHIFT_H часа на следващия ден.
+  const SHIFT_H = CFG.turgShiftHour != null && !isNaN(Number(CFG.turgShiftHour)) ? Number(CFG.turgShiftHour) : 14;
+  function shiftStart(t) { const d = new Date(t); d.setHours(SHIFT_H, 0, 0, 0); if (d.getTime() > t) d.setDate(d.getDate() - 1); return d.getTime(); }
+  const isTg = id => String(id).startsWith('tg-');
+
   // ---------- visits (server + pending) ----------
   function applyOp(m, op) {
     if (op.a === 'mark') { const c = m.get(op.pid); if (!c || c.at < op.at) m.set(op.pid, { at: op.at, by: op.by }); }
     else if (op.a === 'unmark') { const c = m.get(op.pid); if (c && c.at <= op.at) m.delete(op.pid); }
     else if (op.a === 'reset') { for (const pid of op.pids || []) { const c = m.get(pid); if (c && c.at <= op.at) m.delete(pid); } }
   }
-  function computeVisits() { const m = new Map(S.server); for (const op of S.queue) applyOp(m, op); V = m; }
+  function computeVisits() {
+    const m = new Map(S.server); for (const op of S.queue) applyOp(m, op);
+    const s0 = shiftStart(Date.now());
+    for (const [k, v] of m) if (isTg(k) && v.at < s0) m.delete(k);
+    V = m;
+  }
   function saveServer() { const o = {}; S.server.forEach((v, k) => { o[k] = v; }); LS.set('obhod.server', o); }
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
@@ -85,7 +95,7 @@
         res = await fetchJSON(API + (API.indexOf('?') >= 0 ? '&' : '?') + 'action=state&t=' + Date.now());
       }
       if (res && res.ok) {
-        S.server = new Map((res.visits || []).filter(v => ptById[v.pid]).map(v => [v.pid, { at: Number(v.at), by: v.by || '' }]));
+        S.server = new Map((res.visits || []).filter(v => ptById[v.pid] || isTg(v.pid)).map(v => [v.pid, { at: Number(v.at), by: v.by || '' }]));
         saveServer();
         if (res.drivers && res.drivers.length) { S.drivers = res.drivers; LS.set('obhod.drivers', S.drivers); }
         S.lastSync = Date.now(); S.syncErr = false;
@@ -146,6 +156,150 @@
     for (let i = 0; i < (p.g || 0); i++) s.append(el('i', 'dot g'));
     return s;
   }
+  // ---------- търговски наряди: листовете „Наряд …“ и „Търговски обекти“ в таблицата ----------
+  const TURG = byKey.turg || null;
+  const TURG_BUILTIN = TURG ? TURG.pts.slice() : [];
+  const WEEK = ['неделя', 'понеделник', 'вторник', 'сряда', 'четвъртък', 'петък', 'събота'];
+  const SHORT = { 'понеделник': 'Пн', 'вторник': 'Вт', 'сряда': 'Ср', 'четвъртък': 'Чт', 'петък': 'Пт', 'събота': 'Сб', 'неделя': 'Нд' };
+  const normName = s => String(s || '').toLowerCase().replace(/ё/g, 'е').replace(/[„“"'`´’]/g, '').replace(/[\s\-–—_.,()\/]+/g, ' ').trim();
+  const TRL = { 'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'sht', 'ъ': 'a', 'ь': '', 'ю': 'yu', 'я': 'ya' };
+  const slugId = s => 'tg-' + Array.from(String(s).toLowerCase()).map(ch => TRL[ch] != null ? TRL[ch] : ch).join('').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+
+  function parseLL(s) {
+    const m = String(s || '').match(/-?\d+[.,]\d+/g);
+    if (!m || m.length < 2) return null;
+    let a = parseFloat(m[0].replace(',', '.')), b = parseFloat(m[1].replace(',', '.'));
+    if (a > 18 && a < 32 && b > 38 && b < 48) { const t = a; a = b; b = t; }
+    return (a > 38 && a < 48 && b > 18 && b < 32) ? { lat: a, lon: b } : null;
+  }
+  function parsePhones(s, def) {
+    const out = [];
+    for (const part of String(s || '').split(/[;\n]+/)) {
+      const m = part.match(/\+?\d[\d\s\-\/().]{5,}\d/);
+      if (!m) continue;
+      let d = m[0].replace(/[^\d+]/g, '');
+      if (d.startsWith('00')) d = '+' + d.slice(2);
+      else if (d.startsWith('359')) d = '+' + d;
+      else if (d.startsWith('0')) d = '+359' + d.slice(1);
+      else if (!d.startsWith('+') && d.length === 9) d = '+359' + d;
+      const label = part.replace(m[0], '').replace(/^[\s:,\-–—]+|[\s:,\-–—]+$/g, '') || def;
+      out.push([label, d]);
+    }
+    return out;
+  }
+  // Колоните се намират по заглавията – редът им няма значение.
+  function parseTable(values) {
+    values = values || [];
+    let hi = -1;
+    for (let i = 0; i < Math.min(values.length, 6); i++) if ((values[i] || []).some(v => /обект/i.test(String(v)))) { hi = i; break; }
+    if (hi < 0) return [];
+    const c = {};
+    values[hi].forEach((h, i) => {
+      h = String(h || '').toLowerCase().trim();
+      const k = /друг/.test(h) ? 'alias' : /обект/.test(h) ? 'name' : /координат/.test(h) ? 'll' : /ширина/.test(h) ? 'lat' : /дължина/.test(h) ? 'lon'
+        : /адрес/.test(h) ? 'addr' : /телефон/.test(h) ? 'ph' : /етикет/.test(h) ? 'tag' : /бележк/.test(h) ? 'note' : '';
+      if (k && c[k] == null) c[k] = i;
+    });
+    if (c.name == null) return [];
+    const out = [];
+    for (let i = hi + 1; i < values.length; i++) {
+      const row = values[i] || [];
+      const g = k => c[k] == null || row[c[k]] == null ? '' : String(row[c[k]]).trim();
+      const name = g('name'); if (!name) continue;
+      let ll = parseLL(g('ll'));
+      if (!ll && c.lat != null && c.lon != null) ll = parseLL(g('lat') + '; ' + g('lon'));
+      out.push({ name, ll, addr: g('addr'), ph: g('ph'), tag: g('tag'), note: g('note'), alias: g('alias') });
+    }
+    return out;
+  }
+  function buildDay(items, cat) {
+    const pts = [], seen = {};
+    items.forEach((it, i) => {
+      const c = cat.get(normName(it.name)) || null;
+      let id = slugId(c ? c.name : it.name);
+      if (seen[id]) { seen[id]++; id += '-' + seen[id]; } else seen[id] = 1;
+      const p = { id, n: String(i + 1), st: it.name, y: null, g: null, grp: 'Търговски' };
+      const ll = it.ll || (c && c.ll);
+      if (ll) { p.lat = ll.lat; p.lon = ll.lon; }
+      const addr = it.addr || (c && c.addr); if (addr) p.addr = addr;
+      const tags = Array.from(new Set([it.tag, c && c.tag].filter(Boolean))); if (tags.length) p.tag = tags.join(' · ');
+      const notes = Array.from(new Set([it.note, c && c.note].filter(Boolean))); if (notes.length) p.note = notes.join(' ');
+      const ph = parsePhones(it.ph, it.name).concat(c ? parsePhones(c.ph, c.name) : []); if (ph.length) p.ph = ph;
+      pts.push(p);
+    });
+    return pts;
+  }
+  function parseNariad(raw) {
+    let catRows = []; const tabs = [];
+    for (const t of (raw && raw.tabs) || []) {
+      const nm = String(t.name || '').trim();
+      if (normName(nm) === 'търговски обекти') catRows = parseTable(t.values);
+      else if (/^наряд/i.test(nm)) tabs.push({ name: nm.replace(/^наряд[\s:–\-]*/i, '').trim() || nm, items: parseTable(t.values) });
+    }
+    const cat = new Map();
+    for (const r of catRows) { const k = normName(r.name); if (k && !cat.has(k)) cat.set(k, r); }
+    for (const r of catRows) for (const a of (r.alias || '').split(/[;\n]+/)) { const k = normName(a); if (k && !cat.has(k)) cat.set(k, r); }
+    return { src: 'sheet', at: Number(raw.at) || Date.now(), days: tabs.map(t => ({ name: t.name, pts: buildDay(t.items, cat) })) };
+  }
+  let NAR = null, narSig = '', narBusy = false, narLast = 0, narErr = false, started = false;
+  function builtinNariad() { return { src: 'builtin', at: 0, days: TURG_BUILTIN.length ? [{ name: 'Сряда', pts: TURG_BUILTIN }] : [] }; }
+  const dayOf = name => NAR && NAR.days.find(d => d.name === name);
+  function todayDay() {
+    if (!NAR) return null;
+    const wd = WEEK[new Date(shiftStart(Date.now())).getDay()];
+    const d = NAR.days.find(x => normName(x.name) === wd);
+    return d ? d.name : null;
+  }
+  function chosenDay() {
+    if (!NAR || !NAR.days.length) return null;
+    const ch = LS.get('obhod.turgDay', null);
+    if (ch && ch.shift === shiftStart(Date.now()) && dayOf(ch.day)) return ch.day;
+    return todayDay() || (NAR.days.find(d => d.pts.length) || NAR.days[0]).name;
+  }
+  function applyTurg() {
+    if (!TURG || !NAR) return;
+    S.turgDay = chosenDay();
+    const day = dayOf(S.turgDay), pts = day ? day.pts : [];
+    for (const p of TURG.pts) if (ptById[p.id] === p) delete ptById[p.id];
+    for (const p of pts) {
+      p.route = 'turg'; p.routeName = 'Търговски' + (S.turgDay ? ' – ' + S.turgDay : ''); p.kind = 'turg';
+      p.ll = p.lat != null && p.lon != null; p.shape = 'ci'; p.grp = 'Търговски';
+      ptById[p.id] = p;
+    }
+    TURG.pts = pts; TURG.ordered = pts.slice();
+    if (S.sel && !ptById[S.sel]) S.sel = null;
+    if (S.route === 'turg' && started) buildMarkers();
+  }
+  function setNariad(raw) {
+    const sig = JSON.stringify(raw.tabs || []);
+    if (sig === narSig && NAR && NAR.src === 'sheet') { NAR.at = Number(raw.at) || NAR.at; return false; }
+    narSig = sig; NAR = parseNariad(raw);
+    applyTurg();
+    return true;
+  }
+  function setDay(name) {
+    if (!dayOf(name)) return;
+    LS.set('obhod.turgDay', { day: name, shift: shiftStart(Date.now()) });
+    applyTurg(); refresh();
+    const left = cur().pts.filter(p => !V.has(p.id));
+    fitTo(left.length ? left : cur().pts);
+  }
+  async function loadNariad(force) {
+    if (!API || !TURG || narBusy) return;
+    if (!force && Date.now() - narLast < 120000) return;
+    narBusy = true;
+    try {
+      const res = await fetchJSON(API + (API.indexOf('?') >= 0 ? '&' : '?') + 'action=nariad&t=' + Date.now());
+      if (res && res.ok && res.nariad && res.nariad.tabs) {
+        LS.set('obhod.nariad', res.nariad);
+        narErr = false;
+        if (setNariad(res.nariad)) { refresh(); if (S.route === 'turg') { const left = cur().pts.filter(p => !V.has(p.id)); fitTo(left.length ? left : cur().pts); } }
+      } else narErr = res && res.ok ? 'old' : true;
+    } catch (e) { narErr = true; }
+    narLast = Date.now(); narBusy = false;
+    if (S.route === 'turg') renderSummary();
+  }
+
   // ---------- navigation apps ----------
   const IS_HUAWEI = /huawei|honor|harmonyos|hmscore/i.test(navigator.userAgent || '');
   const addrQ = p => encodeURIComponent((p.addr || p.st) + ', София');
@@ -338,7 +492,7 @@
     $('#yelTot').textContent = yt; $('#yelLeft').textContent = yl;
     const hasY = r.pts.some(p => p.y != null);
     $('.yel').hidden = !hasY;
-    $('#dayLbl').hidden = !r.day; $('#dayLbl').textContent = r.day || '';
+    renderDays(r);
     $('#resetBtn').disabled = !done;
     // route through next remaining points: nearest-first from my position, else by number
     const left = r.ordered.filter(p => !V.has(p.id) && p.ll);
@@ -357,6 +511,31 @@
     if (u) { setLink(a, u); a.removeAttribute('aria-disabled'); $('#routeTxt').textContent = multi ? `Маршрут: следващите ${seq.length}` : (r.kind === 'turg' ? `Навигация до ${seq[0].st}` : `Навигация до т. ${seq[0].n}`); }
     else { a.removeAttribute('href'); a.setAttribute('aria-disabled', 'true'); $('#routeTxt').textContent = 'Всички са минати'; }
     $('#navName').textContent = navApp() ? NAV_APPS[navApp()].name : 'не е избрано';
+  }
+  function renderDays(r) {
+    const box = $('#days'), lbl = $('#dayLbl');
+    const on = r.kind === 'turg' && !!NAR;
+    box.hidden = !on; lbl.hidden = !on;
+    box.textContent = '';
+    if (!on) return;
+    const today = todayDay();
+    for (const d of NAR.days) {
+      const b = el('button', 'chip day' + (d.name === today ? ' today' : '') + (d.pts.length ? '' : ' none'));
+      b.type = 'button'; b.dataset.day = d.name;
+      b.setAttribute('aria-pressed', String(d.name === S.turgDay));
+      b.textContent = SHORT[normName(d.name)] || d.name;
+      b.title = d.name + ' · ' + d.pts.length + ' ' + plural(d.pts.length, 'обект', 'обекта');
+      box.append(b);
+    }
+    const st = el('button', 'stamp'); st.type = 'button'; st.dataset.act = 'nariad';
+    if (!API) st.textContent = '';
+    else if (NAR.src !== 'sheet') st.textContent = narErr === 'old' ? 'Вграден списък' : (narBusy ? 'Зареждам…' : 'Вграден списък ↻');
+    else st.textContent = (narErr === true ? 'Без връзка · ' : '↻ ') + fmtWhen(NAR.at);
+    st.title = 'Обнови наряда от таблицата';
+    box.append(st);
+    const name = S.turgDay || '';
+    lbl.textContent = name ? 'Наряд ' + name.toLowerCase() + (today && name !== today ? ' · не е днешният' : '') : 'Няма наряд';
+    lbl.classList.toggle('warn', !!(today && name && name !== today));
   }
   function subEl(p, withGroup, noDist) {
     const sub = el('span', 'sub');
@@ -381,7 +560,9 @@
     else { p = r.ordered.find(q => !V.has(q.id)) || null; label = 'Следваща'; }
     if (!p) {
       card.className = 'card';
-      card.append(el('div', 'empty-card', 'Всички точки в маршрута са минати. Натиснете „Нов курс“ преди следващия обход.'));
+      const msg = r.kind !== 'turg' ? 'Всички точки в маршрута са минати. Натиснете „Нов курс“ преди следващия обход.'
+        : (r.pts.length ? 'Всички обекти от наряда са минати.' : 'Няма обекти в наряда' + (S.turgDay ? ' за ' + S.turgDay.toLowerCase() : '') + '.');
+      card.append(el('div', 'empty-card', msg));
       return;
     }
     if (S.pos && p.ll) d = distM(S.pos, p);
@@ -440,7 +621,7 @@
     if (S.filter === 'left') pts = pts.filter(p => !V.has(p.id));
     if (S.filter === 'done') pts = pts.filter(p => V.has(p.id));
     if (!pts.length) {
-      ul.append(el('li', 'empty', S.filter === 'left' ? 'Всички точки са минати.' : (S.filter === 'done' ? 'Още няма минати точки.' : 'Няма точки.')));
+      ul.append(el('li', 'empty', !r.pts.length ? (r.kind === 'turg' ? 'Няма обекти в този наряд.' : 'Няма точки.') : (S.filter === 'left' ? 'Всички точки са минати.' : (S.filter === 'done' ? 'Още няма минати точки.' : 'Няма точки.'))));
       return;
     }
     const multi = r.groups.length > 1;
@@ -493,6 +674,7 @@
   function setRoute(key) {
     if (!byKey[key] || key === S.route) return;
     S.route = key; S.sel = null; LS.set('obhod.route', key);
+    if (key === 'turg') { applyTurg(); loadNariad(Date.now() - narLast > 30000); }
     buildMarkers(); refresh(); fitTo(cur().pts.filter(p => !V.has(p.id)).length ? cur().pts.filter(p => !V.has(p.id)) : cur().pts);
   }
   function setSheet(state) { $('#sheet').dataset.state = state; $('#grab').setAttribute('aria-label', state === 'full' ? 'Скрий списъка' : 'Покажи списъка'); setTimeout(() => map.invalidateSize(), 260); }
@@ -531,9 +713,10 @@
   $('#navModal').addEventListener('click', e => { if (e.target.id === 'navModal') $('#navModal').hidden = true; });
 
   document.addEventListener('click', e => {
-    const t = e.target.closest('[data-act],[data-route],[data-f],[data-s]');
+    const t = e.target.closest('[data-act],[data-route],[data-f],[data-s],[data-day]');
     if (!t) return;
     if (t.dataset.route) { setRoute(t.dataset.route); return; }
+    if (t.dataset.day) { setDay(t.dataset.day); return; }
     if (t.dataset.f) { S.filter = t.dataset.f; LS.set('obhod.filter', S.filter); renderFilters(); renderList(); return; }
     if (t.dataset.s) {
       if (t.dataset.s === 'near' && !S.pos) { toast(S.geoErr === 'denied' ? 'Няма достъп до местоположението. Разрешете го от настройките на браузъра.' : 'Изчаквам местоположението…'); }
@@ -544,6 +727,7 @@
     else if (act === 'select') select(t.dataset.id, true);
     else if (act === 'unselect') select(null, false);
     else if (act === 'navchange') openNavPicker(null);
+    else if (act === 'nariad') { narErr = false; loadNariad(true); renderSummary(); }
   });
   $('#grab').addEventListener('click', () => setSheet($('#sheet').dataset.state === 'full' ? 'peek' : 'full'));
   $('#locBtn').addEventListener('click', () => {
@@ -597,18 +781,31 @@
   $('#confirmModal').addEventListener('click', e => { if (e.target.id === 'confirmModal') $('#confirmModal').hidden = true; });
 
   // ---------- start ----------
+  if (TURG) {
+    const cached = LS.get('obhod.nariad', null);
+    if (cached && cached.tabs) setNariad(cached);
+    if (!NAR) NAR = builtinNariad();
+    applyTurg();
+  }
+  started = true;
   buildMarkers();
   refresh();
   setTimeout(() => { map.invalidateSize(); const left = cur().pts.filter(p => !V.has(p.id)); fitTo(left.length ? left : cur().pts); }, 60);
   window.addEventListener('resize', () => map.invalidateSize());
   startGeo();
   keepAwake();
-  if (API) sync();
+  if (API) { sync(); loadNariad(true); }
   if (!S.name) openWho();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});
     let reloaded = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloaded && navigator.serviceWorker.controller) { reloaded = true; } });
   }
-  setInterval(() => { renderSync(); }, 15000);
+  setInterval(() => {
+    renderSync();
+    if (!TURG || !NAR) return;
+    // нова смяна: денят по подразбиране се сменя сам, ако шофьорът не е избрал друг
+    if (S.turgDay !== chosenDay()) { applyTurg(); refresh(); }
+    if (S.route === 'turg' && document.visibilityState === 'visible') loadNariad(false);
+  }, 15000);
 })();
