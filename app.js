@@ -149,7 +149,7 @@
   }
   function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function dotsEl(p) {
-    if (p.y == null && p.g == null && p.kind === 'turg') return null;
+    if (p.y == null && p.g == null && p.kind) return null;   // търговски и маршрутите без бройки
     const s = el('span', 'dots'); s.title = contTxt(p); s.setAttribute('aria-label', contTxt(p));
     if (p.y == null && p.g == null) { s.textContent = '?'; return s; }
     for (let i = 0; i < (p.y || 0); i++) s.append(el('i', 'dot y'));
