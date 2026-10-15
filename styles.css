@@ -10,7 +10,7 @@
   --f-cond: "IBM Plex Sans Condensed", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
   color-scheme: light;
 }
-/* Нощен режим: по системата на телефона или ръчно с бутона (data-theme на <html>). */
+/* Тъмни цветове на приложението – по настройката на телефона. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
   --bg: #0e1311; --surface: #161d19; --ink: #e3eae5; --muted: #93a198; --line: #28322c;
@@ -21,8 +21,6 @@
   --shadow: 0 10px 28px rgba(0, 0, 0, .55);
   color-scheme: dark;
   }
-  :root:not([data-theme="light"]) .leaflet-tile { filter: invert(1) hue-rotate(180deg) brightness(.85) contrast(.9) saturate(.6); }
-  :root:not([data-theme="light"]) .leaflet-container { background: #111714; }
 }
 :root[data-theme="dark"] {
   --bg: #0e1311; --surface: #161d19; --ink: #e3eae5; --muted: #93a198; --line: #28322c;
@@ -33,8 +31,13 @@
   --shadow: 0 10px 28px rgba(0, 0, 0, .55);
   color-scheme: dark;
 }
-:root[data-theme="dark"] .leaflet-tile { filter: invert(1) hue-rotate(180deg) brightness(.85) contrast(.9) saturate(.6); }
-:root[data-theme="dark"] .leaflet-container { background: #111714; }
+/* Нощна карта: по настройката на телефона или ръчно с бутона (data-map на <html>) – сменя се само картата. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-map="light"]) .leaflet-tile { filter: invert(1) hue-rotate(180deg) brightness(.85) contrast(.9) saturate(.6); }
+  :root:not([data-map="light"]) .leaflet-container { background: #111714; }
+}
+:root[data-map="dark"] .leaflet-tile { filter: invert(1) hue-rotate(180deg) brightness(.85) contrast(.9) saturate(.6); }
+:root[data-map="dark"] .leaflet-container { background: #111714; }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html, body { height: 100%; margin: 0; }
@@ -71,11 +74,11 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
 .fab[data-state="follow"] { background: var(--me); color: #fff; border-color: transparent; }
 .fab[data-state="on"] { color: var(--me); }
 #themeBtn .sun { display: none; }
-:root[data-theme="dark"] #themeBtn .sun { display: block; }
-:root[data-theme="dark"] #themeBtn .moon { display: none; }
+:root[data-map="dark"] #themeBtn .sun { display: block; }
+:root[data-map="dark"] #themeBtn .moon { display: none; }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) #themeBtn .sun { display: block; }
-  :root:not([data-theme="light"]) #themeBtn .moon { display: none; }
+  :root:not([data-map="light"]) #themeBtn .sun { display: block; }
+  :root:not([data-map="light"]) #themeBtn .moon { display: none; }
 }
 
 /* markers */

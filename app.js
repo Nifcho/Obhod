@@ -793,20 +793,17 @@
   $('#whoModal').addEventListener('click', e => { if (e.target.id === 'whoModal' && S.name) $('#whoModal').hidden = true; });
   $('#confirmModal').addEventListener('click', e => { if (e.target.id === 'confirmModal') $('#confirmModal').hidden = true; });
 
-  // ---------- дневен / нощен режим ----------
+  // ---------- дневна / нощна карта (сменя се само картата) ----------
   const darkMQ = window.matchMedia ? matchMedia('(prefers-color-scheme: dark)') : null;
-  const isDark = () => { const t = document.documentElement.dataset.theme; return t ? t === 'dark' : !!(darkMQ && darkMQ.matches); };
-  function syncThemeColor() {
-    const m = document.querySelector('meta[name="theme-color"]'); if (m) m.content = isDark() ? '#161d19' : '#17663f';
-    $('#themeBtn').setAttribute('aria-label', isDark() ? 'Дневен режим' : 'Нощен режим');
-  }
+  const isMapDark = () => { const t = document.documentElement.dataset.map; return t ? t === 'dark' : !!(darkMQ && darkMQ.matches); };
+  const syncMapBtn = () => $('#themeBtn').setAttribute('aria-label', isMapDark() ? 'Дневна карта' : 'Нощна карта');
   $('#themeBtn').addEventListener('click', () => {
-    const t = isDark() ? 'light' : 'dark';
-    document.documentElement.dataset.theme = t; LS.set('obhod.theme', t); syncThemeColor();
-    toast(t === 'dark' ? 'Нощен режим' : 'Дневен режим');
+    const t = isMapDark() ? 'light' : 'dark';
+    document.documentElement.dataset.map = t; LS.set('obhod.map', t); syncMapBtn();
+    toast(t === 'dark' ? 'Нощна карта' : 'Дневна карта');
   });
-  if (darkMQ && darkMQ.addEventListener) darkMQ.addEventListener('change', syncThemeColor);
-  syncThemeColor();
+  if (darkMQ && darkMQ.addEventListener) darkMQ.addEventListener('change', syncMapBtn);
+  syncMapBtn();
 
   // ---------- инсталиране: при отваряне в браузъра приложението само предлага да се инсталира ----------
   const UA = navigator.userAgent || '';
