@@ -464,16 +464,19 @@
     for (const p of cur().pts) { if (V.has(p.id) || !p.ll) continue; const d = distM(S.pos, p); if (d < bd) { bd = d; best = p; } }
     return best ? { p: best, d: bd } : null;
   }
+  // Маршрутът се избира от падащо меню; до името е колко точки остават.
   function renderRoutes() {
-    const nav = $('#routes'); nav.textContent = '';
-    for (const r of ROUTES) {
-      const b = el('button'); b.type = 'button'; b.setAttribute('role', 'tab'); b.dataset.route = r.key;
-      b.setAttribute('aria-selected', String(r.key === S.route));
-      b.append(r.name);
-      const left = r.pts.filter(p => !V.has(p.id)).length;
-      const s = el('span', 'left', String(left)); s.title = 'остават'; b.append(s);
-      nav.append(b);
+    const sel = $('#routeSel');
+    if (sel.options.length !== ROUTES.length) {
+      sel.textContent = '';
+      for (const r of ROUTES) { const o = document.createElement('option'); o.value = r.key; sel.append(o); }
     }
+    ROUTES.forEach((r, i) => {
+      const left = r.pts.filter(p => !V.has(p.id)).length;
+      const txt = r.name + ' · ' + (r.pts.length ? (left ? 'остават ' + left : 'всички минати') : 'няма точки');
+      if (sel.options[i].textContent !== txt) sel.options[i].textContent = txt;
+    });
+    if (sel.value !== S.route) sel.value = S.route;
   }
   function renderWho() {
     const b = $('#whoBtn');
@@ -737,6 +740,7 @@
     else if (act === 'navchange') openNavPicker(null);
     else if (act === 'nariad') { narErr = false; loadNariad(true); renderSummary(); }
   });
+  $('#routeSel').addEventListener('change', e => { setRoute(e.target.value); e.target.blur(); });
   $('#grab').addEventListener('click', () => setSheet($('#sheet').dataset.state === 'full' ? 'peek' : 'full'));
   $('#locBtn').addEventListener('click', () => {
     if (!S.pos) {

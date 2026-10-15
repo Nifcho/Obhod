@@ -20,7 +20,10 @@
 <body>
 <div class="app">
   <header class="bar">
-    <nav class="routes" id="routes" role="tablist" aria-label="Маршрут"></nav>
+    <label class="routesel">
+      <select id="routeSel" aria-label="Маршрут"></select>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+    </label>
     <button class="who" id="whoBtn" type="button" aria-label="Смени шофьора">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
       <span id="whoName">Кой си?</span>
