@@ -464,7 +464,7 @@
     for (const p of cur().pts) { if (V.has(p.id) || !p.ll) continue; const d = distM(S.pos, p); if (d < bd) { bd = d; best = p; } }
     return best ? { p: best, d: bd } : null;
   }
-  // Маршрутът се избира от падащо меню; до името е колко точки остават.
+  // Маршрутът се избира от падащо меню; до името е колко точки остават (✓ – всички минати).
   function renderRoutes() {
     const sel = $('#routeSel');
     if (sel.options.length !== ROUTES.length) {
@@ -473,7 +473,7 @@
     }
     ROUTES.forEach((r, i) => {
       const left = r.pts.filter(p => !V.has(p.id)).length;
-      const txt = r.name + ' · ' + (r.pts.length ? (left ? 'остават ' + left : 'всички минати') : 'няма точки');
+      const txt = r.name + (r.pts.length ? (left ? ' · ' + left : ' ✓') : '');
       if (sel.options[i].textContent !== txt) sel.options[i].textContent = txt;
     });
     if (sel.value !== S.route) sel.value = S.route;
@@ -792,6 +792,21 @@
   $('#otherForm').addEventListener('submit', e => { e.preventDefault(); setName($('#otherName').value); });
   $('#whoModal').addEventListener('click', e => { if (e.target.id === 'whoModal' && S.name) $('#whoModal').hidden = true; });
   $('#confirmModal').addEventListener('click', e => { if (e.target.id === 'confirmModal') $('#confirmModal').hidden = true; });
+
+  // ---------- дневен / нощен режим ----------
+  const darkMQ = window.matchMedia ? matchMedia('(prefers-color-scheme: dark)') : null;
+  const isDark = () => { const t = document.documentElement.dataset.theme; return t ? t === 'dark' : !!(darkMQ && darkMQ.matches); };
+  function syncThemeColor() {
+    const m = document.querySelector('meta[name="theme-color"]'); if (m) m.content = isDark() ? '#161d19' : '#17663f';
+    $('#themeBtn').setAttribute('aria-label', isDark() ? 'Дневен режим' : 'Нощен режим');
+  }
+  $('#themeBtn').addEventListener('click', () => {
+    const t = isDark() ? 'light' : 'dark';
+    document.documentElement.dataset.theme = t; LS.set('obhod.theme', t); syncThemeColor();
+    toast(t === 'dark' ? 'Нощен режим' : 'Дневен режим');
+  });
+  if (darkMQ && darkMQ.addEventListener) darkMQ.addEventListener('change', syncThemeColor);
+  syncThemeColor();
 
   // ---------- инсталиране: при отваряне в браузъра приложението само предлага да се инсталира ----------
   const UA = navigator.userAgent || '';
