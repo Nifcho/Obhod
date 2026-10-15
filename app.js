@@ -738,6 +738,7 @@
     else if (act === 'select') select(t.dataset.id, true);
     else if (act === 'unselect') select(null, false);
     else if (act === 'navchange') openNavPicker(null);
+    else if (act === 'install') openInstall(true);
     else if (act === 'nariad') { narErr = false; loadNariad(true); renderSummary(); }
   });
   $('#routeSel').addEventListener('change', e => { setRoute(e.target.value); e.target.blur(); });
@@ -791,6 +792,60 @@
   $('#otherForm').addEventListener('submit', e => { e.preventDefault(); setName($('#otherName').value); });
   $('#whoModal').addEventListener('click', e => { if (e.target.id === 'whoModal' && S.name) $('#whoModal').hidden = true; });
   $('#confirmModal').addEventListener('click', e => { if (e.target.id === 'confirmModal') $('#confirmModal').hidden = true; });
+
+  // ---------- инсталиране: при отваряне в браузъра приложението само предлага да се инсталира ----------
+  const UA = navigator.userAgent || '';
+  const IS_IOS = /iphone|ipad|ipod/i.test(UA) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const IS_MOBILE = IS_IOS || /android|mobile|huawei|harmonyos/i.test(UA);
+  const isStandalone = () => (window.matchMedia && (matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches)) || navigator.standalone === true;
+  let installEvt = null, installShown = false, installTimer = 0;
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault(); installEvt = e;
+    $('#installRow').hidden = false;
+    clearTimeout(installTimer); maybeAskInstall(false);
+  });
+  window.addEventListener('appinstalled', () => {
+    installEvt = null; $('#installModal').hidden = true; $('#installRow').hidden = true;
+    toast('Приложението е инсталирано – вече е на началния екран.');
+  });
+  function installSnoozed() { const t = LS.get('obhod.installNo', 0); return t && Date.now() - t < 24 * 3600e3; }
+  function openInstall(manual) {
+    const steps = $('#installSteps'); steps.textContent = '';
+    let txt = '„Обход“ ще е на началния екран и ще се отваря на цял екран като обикновено приложение.';
+    if (!installEvt) {
+      const lines = IS_IOS
+        ? ['Натиснете бутона „Сподели“ (квадратче със стрелка нагоре) в долната лента.', 'Изберете „Добави към началния екран“.', 'Натиснете „Добави“.']
+        : ['Отворете менюто на браузъра (трите точки или чертички).', 'Изберете „Инсталирай приложението“ или „Добави към началния екран“.', 'Потвърдете.'];
+      for (const l of lines) steps.append(el('li', null, l));
+      txt = 'Така „Обход“ ще е на началния екран и ще се отваря на цял екран:';
+    }
+    $('#installTxt').textContent = txt;
+    steps.hidden = !!installEvt;
+    $('#installYes').textContent = installEvt ? 'Инсталирай' : 'Разбрах';
+    $('#installNo').hidden = !installEvt && !!manual;
+    $('#installModal').hidden = false; installShown = true;
+  }
+  function maybeAskInstall(fallback) {
+    if (installShown || isStandalone() || installSnoozed()) return;
+    if (!$('#whoModal').hidden || !$('#navModal').hidden || !$('#confirmModal').hidden) { installTimer = setTimeout(() => maybeAskInstall(fallback), 1500); return; }
+    if (installEvt) { openInstall(false); return; }
+    if (!fallback || !IS_MOBILE) return;
+    // без beforeinstallprompt (iPhone, някои браузъри): ако вече е инсталирано, не питаме
+    const check = navigator.getInstalledRelatedApps ? navigator.getInstalledRelatedApps().catch(() => []) : Promise.resolve([]);
+    check.then(apps => { if (!apps.length && !installShown && !installEvt) openInstall(false); });
+  }
+  $('#installYes').addEventListener('click', async () => {
+    $('#installModal').hidden = true;
+    if (!installEvt) { LS.set('obhod.installNo', Date.now()); return; }
+    const e = installEvt; installEvt = null;
+    try { await e.prompt(); const r = await e.userChoice; if (r && r.outcome !== 'accepted') LS.set('obhod.installNo', Date.now()); } catch (err) {}
+  });
+  $('#installNo').addEventListener('click', () => { $('#installModal').hidden = true; LS.set('obhod.installNo', Date.now()); });
+  $('#installModal').addEventListener('click', e => { if (e.target.id === 'installModal') { $('#installModal').hidden = true; LS.set('obhod.installNo', Date.now()); } });
+  if (!isStandalone()) {
+    if (IS_MOBILE) $('#installRow').hidden = false;
+    installTimer = setTimeout(() => maybeAskInstall(true), 4000);
+  }
 
   // ---------- start ----------
   if (TURG) {

@@ -74,6 +74,7 @@
       </div>
       <ol class="list" id="list"></ol>
       <p class="navset">Навигация с: <b id="navName">не е избрано</b> <button type="button" class="link" data-act="navchange">Смени</button></p>
+      <p class="navset" id="installRow" hidden>Приложението не е инсталирано. <button type="button" class="link" data-act="install">Инсталирай</button></p>
       <p class="foot">Отметките се записват в таблицата „Обход на точките – отметки“. Точките са по картите на Екобулпак.</p>
     </div>
   </section>
@@ -106,6 +107,18 @@
     <div class="row end">
       <button class="btn" type="button" id="confirmNo">Отказ</button>
       <button class="btn solid-danger" type="button" id="confirmYes">Изчисти</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="installModal" hidden>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="installTitle">
+    <div class="inst-hd"><img src="icons/icon-192.png" alt="" width="52" height="52"><h2 id="installTitle">Да инсталирам ли приложението?</h2></div>
+    <p class="muted" id="installTxt">„Обход“ ще е на началния екран и ще се отваря на цял екран като обикновено приложение.</p>
+    <ol class="inst-steps" id="installSteps" hidden></ol>
+    <div class="row end">
+      <button class="btn" type="button" id="installNo">Не сега</button>
+      <button class="btn primary" type="button" id="installYes">Инсталирай</button>
     </div>
   </div>
 </div>

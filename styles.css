@@ -186,6 +186,9 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
 .row.end { justify-content: flex-end; }
 .other input { flex: 1; min-width: 0; min-height: 46px; border-radius: 11px; border: 1px solid var(--line); padding: 0 12px; font: 16px var(--f-body); background: var(--bg); color: var(--ink); }
 
+.inst-hd { display: flex; align-items: center; gap: 12px; }
+.inst-hd img { border-radius: 12px; flex: none; }
+.inst-steps { margin: 0; padding-left: 22px; display: grid; gap: 6px; font-size: 15px; }
 .toast { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 124px); transform: translateX(-50%); z-index: 3000; max-width: calc(100% - 32px); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 11px; font-size: 14px; box-shadow: var(--shadow); }
 
 @media (min-width: 900px) {
