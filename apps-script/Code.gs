@@ -12,7 +12,7 @@
  *   „Шофьори“  – имената, които приложението предлага (може да се редактира)
  *   „Търговски обекти“ – обектите с координати, адрес, телефон и бележка
  *   „Наряд …“  – по един лист на ден (напр. „Наряд Понеделник“): обектите в реда на обхода
- *   „Счупени“  – сигнали за счупени кофи от шофьорите; за всеки идва имейл само до собственика.
+ *   „Счупени“  – сигнали за счупени кофи от шофьорите; за всеки идва имейл (адресът е в лист „Настройки“).
  *                Когато кофата е оправена, напишете „Оправено“ в колона „Статус“ – маха се от приложението.
  *
  * Първи път след добавянето на сигналите: изберете функцията „probaIzvestie“ горе и натиснете ▶ „Изпълни“,
@@ -28,8 +28,10 @@ var SHEET_DRIVERS = 'Шофьори';
 var SHEET_OBJECTS = 'Търговски обекти';
 var NARIAD_PREFIX = 'Наряд';
 var SHEET_BROKEN = 'Счупени';
-// Кой получава известията за счупени кофи. Празно = собственикът на таблицата (който е внедрил скрипта).
-var NOTIFY_TO = '';
+var SHEET_SETTINGS = 'Настройки';
+// Кой получава известията за счупени кофи: адресът от листа „Настройки“ (ред „Известия…“, колона B,
+// може няколко, разделени със запетая). Ако там е празно – този адрес, а ако и той е празен – собственикът.
+var NOTIFY_TO = 'nikolay.dimitrov@alara.bg';
 var BROKEN_HEAD = ['Дата и час', 'Маршрут', 'Точка', 'Улица', 'Кофа', 'Бележка', 'Шофьор', 'Карта', 'Статус', 'Известие', 'Код на точката', 'Код на сигнала'];
 
 function doGet(e) {
@@ -104,6 +106,11 @@ function ensureSheets_(ss) {
   }
   if (!ss.getSheetByName(SHEET_DRIVERS)) {
     ss.insertSheet(SHEET_DRIVERS).appendRow(['Име']);
+  }
+  if (!ss.getSheetByName(SHEET_SETTINGS)) {
+    var st = ss.insertSheet(SHEET_SETTINGS);
+    st.getRange(1, 1, 1, 2).setValues([['Известия за счупени кофи до', '']]);
+    st.getRange(1, 1).setFontWeight('bold');
   }
   if (!ss.getSheetByName(SHEET_BROKEN)) {
     var b = ss.insertSheet(SHEET_BROKEN);
@@ -239,6 +246,16 @@ function applyReport_(ss, rp) {
 }
 
 function notifyTo_() {
+  var sh = SpreadsheetApp.getActive().getSheetByName(SHEET_SETTINGS);
+  if (sh && sh.getLastRow() > 0) {
+    var rows = sh.getRange(1, 1, sh.getLastRow(), 2).getDisplayValues();
+    for (var i = 0; i < rows.length; i++) {
+      if (/известия/i.test(rows[i][0])) {
+        var to = String(rows[i][1] || '').replace(/[;\s]+/g, ',').replace(/^,+|,+$/g, '');
+        if (to) return to;
+      }
+    }
+  }
   return NOTIFY_TO || Session.getEffectiveUser().getEmail();
 }
 
