@@ -15,6 +15,7 @@
     tel: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2z"/></svg>',
     off: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/></svg>',
     on: '<svg viewBox="0 0 24 24" aria-hidden="true" style="stroke-width:2.6"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+    warn: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9.5 17h-19z"/><path d="M12 10v4.5M12 17.5v.5"/></svg>',
     undo: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/></svg>'
   };
 
@@ -37,6 +38,8 @@
     name: LS.get('obhod.name', ''),
     server: new Map(Object.entries(LS.get('obhod.server', {}))),
     queue: LS.get('obhod.queue', []),
+    reports: LS.get('obhod.reports', []), reportsOld: false,
+    broken: new Map(Object.entries(LS.get('obhod.broken', {}))),
     drivers: LS.get('obhod.drivers', CFG.drivers || []),
     navApp: LS.get('obhod.nav', ''), routeSeq: [], pendingNav: null,
     sel: null, lastSync: 0, syncErr: false, pos: null, geoErr: null, follow: false, buzzed: {}
@@ -61,6 +64,12 @@
     for (const [k, v] of m) if (isTg(k) && v.at < s0) m.delete(k);
     V = m;
   }
+  // счупени кофи: подадени (от таблицата) + чакащи изпращане от този телефон
+  function brokenOf(id) {
+    const pend = S.reports.filter(r => r.pid === id);
+    if (pend.length) { const r = pend[pend.length - 1]; return { kind: r.kind, note: r.note, by: r.by, at: r.at, pending: true }; }
+    return S.broken.get(id) || null;
+  }
   function saveServer() { const o = {}; S.server.forEach((v, k) => { o[k] = v; }); LS.set('obhod.server', o); }
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
@@ -83,13 +92,20 @@
     syncing = true;
     let res = null;
     try {
-      if (S.queue.length) {
-        const ops = S.queue.slice(0, 40);
-        res = await fetchJSON(API, { method: 'POST', body: JSON.stringify({ ops }) });
+      if (S.queue.length || S.reports.length) {
+        const ops = S.queue.slice(0, 40), reports = S.reports.slice(0, 10);
+        res = await fetchJSON(API, { method: 'POST', body: JSON.stringify(reports.length ? { ops, reports } : { ops }) });
         if (res && res.ok) {
           const done = new Set(res.applied && res.applied.length ? res.applied : ops.map(o => o.id));
           S.queue = S.queue.filter(o => !done.has(o.id));
           LS.set('obhod.queue', S.queue);
+          if (reports.length) {
+            // старият скрипт не познава сигналите – пазим ги, докато таблицата ги потвърди
+            if (Array.isArray(res.reportsApplied)) {
+              const got = new Set(res.reportsApplied);
+              S.reports = S.reports.filter(r => !got.has(r.id)); LS.set('obhod.reports', S.reports); S.reportsOld = false;
+            } else S.reportsOld = true;
+          }
         }
       } else {
         res = await fetchJSON(API + (API.indexOf('?') >= 0 ? '&' : '?') + 'action=state&t=' + Date.now());
@@ -98,18 +114,22 @@
         S.server = new Map((res.visits || []).filter(v => ptById[v.pid] || isTg(v.pid)).map(v => [v.pid, { at: Number(v.at), by: v.by || '' }]));
         saveServer();
         if (res.drivers && res.drivers.length) { S.drivers = res.drivers; LS.set('obhod.drivers', S.drivers); }
+        if (Array.isArray(res.broken)) {
+          S.broken = new Map(res.broken.map(b => [b.pid, b]));
+          const o = {}; S.broken.forEach((v, k) => { o[k] = v; }); LS.set('obhod.broken', o);
+        }
         S.lastSync = Date.now(); S.syncErr = false;
       } else { S.syncErr = true; }
     } catch (e) { S.syncErr = true; }
     syncing = false;
     refresh();
-    scheduleSync(S.queue.length ? (S.syncErr ? 8000 : 1500) : (Number(CFG.pollSec) || 10) * 1000);
+    scheduleSync(S.queue.length ? (S.syncErr ? 8000 : 1500) : (S.reports.length && !S.reportsOld && !S.syncErr ? 3000 : (Number(CFG.pollSec) || 10) * 1000));
   }
   function scheduleSync(ms) {
     if (!API) return;
     clearTimeout(syncTimer);
     syncTimer = setTimeout(() => {
-      if (document.visibilityState === 'visible' || S.queue.length) sync(); else scheduleSync(20000);
+      if (document.visibilityState === 'visible' || S.queue.length || S.reports.length) sync(); else scheduleSync(20000);
     }, ms);
   }
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') scheduleSync(100); });
@@ -350,7 +370,7 @@
 
   function iconFor(p) {
     const d = V.has(p.id);
-    const cls = ['pin', p.shape, d ? 'done' : '', S.sel === p.id ? 'sel' : '', (!d && nearInfo && nearInfo.p === p) ? 'near' : '', p.n.length > 3 ? 'n5' : (p.n.length > 2 ? 'n3' : '')].join(' ');
+    const cls = ['pin', p.shape, d ? 'done' : '', brokenOf(p.id) ? 'brk' : '', S.sel === p.id ? 'sel' : '', (!d && nearInfo && nearInfo.p === p) ? 'near' : '', p.n.length > 3 ? 'n5' : (p.n.length > 2 ? 'n3' : '')].join(' ');
     return L.divIcon({ className: '', html: `<div class="pinbox"><div class="${cls}"><span>${p.n}</span></div></div>`, iconSize: [32, 32], iconAnchor: [16, 16] });
   }
   function buildMarkers() {
@@ -489,6 +509,7 @@
     if (!API) { mode = 'local'; txt = 'Таблицата не е свързана – отметките са само на този телефон'; }
     else if (S.queue.length && S.syncErr) { mode = 'offline'; txt = `Няма връзка – ${S.queue.length} ${plural(S.queue.length, 'отметка чака', 'отметки чакат')}`; }
     else if (S.queue.length) { mode = 'pending'; txt = 'Записвам…'; }
+    else if (S.reports.length) { mode = 'pending'; txt = S.reportsOld ? 'Сигналът за счупена кофа чака – таблицата още не го приема' : (S.syncErr ? 'Няма връзка – сигналът за счупена кофа чака' : 'Изпращам сигнала…'); }
     else if (S.syncErr) { mode = 'offline'; txt = 'Няма връзка с таблицата'; }
     else if (S.lastSync) { mode = 'live'; txt = 'Общи отметки · на живо'; }
     else { mode = 'pending'; txt = 'Свързване…'; }
@@ -553,6 +574,7 @@
     const dt = dotsEl(p); if (dt) sub.append(dt);
     if (withGroup) sub.append(el('span', null, p.grp));
     if (p.tag) sub.append(el('span', 'tag', p.tag));
+    if (brokenOf(p.id)) { const b = el('span', 'brkmark'); b.innerHTML = ICON.warn + '<span>счупена</span>'; sub.append(b); }
     if (p.ph && p.ph.length) { const t = el('span', 'telmark'); t.innerHTML = ICON.tel; t.title = 'Има телефон'; sub.append(t); }
     if (!p.ll) sub.append(el('span', 'noll', 'без точка на картата'));
     const v = V.get(p.id);
@@ -601,11 +623,19 @@
       }
       card.append(ph);
     }
+    const bk = brokenOf(p.id);
+    if (bk) {
+      const w = el('div', 'brkinfo'); w.innerHTML = ICON.warn + '<span></span>';
+      w.lastChild.textContent = 'Счупена кофа' + (bk.kind ? ': ' + bk.kind : '') + ' · ' + (bk.pending ? 'изпраща се…' : (bk.by ? bk.by + ', ' : '') + fmtWhen(bk.at)) + (bk.note ? ' – ' + bk.note : '');
+      card.append(w);
+    }
     const acts = el('div', 'acts');
     const tg = el('button', 'btn' + (done ? '' : ' primary')); tg.type = 'button'; tg.dataset.act = 'toggle'; tg.dataset.id = p.id;
     tg.innerHTML = (done ? ICON.undo : ICON.on) + '<span></span>'; tg.lastChild.textContent = done ? 'Върни' : 'Минах';
     const nv = el('a', 'btn'); setLink(nv, navUrl(p)); nv.dataset.nav = p.id; nv.innerHTML = ICON.nav + '<span>Навигация</span>';
     acts.append(tg, nv); card.append(acts);
+    const rb = el('button', 'btn brkbtn'); rb.type = 'button'; rb.dataset.act = 'broken'; rb.dataset.id = p.id;
+    rb.innerHTML = ICON.warn + '<span>Счупена кофа</span>'; card.append(rb);
   }
   function rowEl(p, withGroup) {
     const li = el('li', 'row ' + p.shape + (V.has(p.id) ? ' done' : '') + (S.sel === p.id ? ' sel' : '')); li.dataset.id = p.id;
@@ -739,6 +769,7 @@
     else if (act === 'unselect') select(null, false);
     else if (act === 'navchange') openNavPicker(null);
     else if (act === 'install') openInstall(true);
+    else if (act === 'broken') openBroken(t.dataset.id);
     else if (act === 'nariad') { narErr = false; loadNariad(true); renderSummary(); }
   });
   $('#routeSel').addEventListener('change', e => { setRoute(e.target.value); e.target.blur(); });
@@ -792,6 +823,37 @@
   $('#otherForm').addEventListener('submit', e => { e.preventDefault(); setName($('#otherName').value); });
   $('#whoModal').addEventListener('click', e => { if (e.target.id === 'whoModal' && S.name) $('#whoModal').hidden = true; });
   $('#confirmModal').addEventListener('click', e => { if (e.target.id === 'confirmModal') $('#confirmModal').hidden = true; });
+
+  // ---------- сигнал за счупена кофа (известие отива само до собственика на таблицата) ----------
+  let brokenFor = null;
+  function openBroken(id) {
+    const p = ptById[id]; if (!p) return;
+    if (!S.name) { openWho(); toast('Първо изберете кой сте.'); return; }
+    brokenFor = id;
+    $('#brokenWhere').textContent = (p.kind === 'turg' ? p.st : 'т. ' + p.n + (p.st ? ' – ' + p.st : '')) + ' · ' + p.routeName;
+    document.querySelectorAll('#brokenKinds .chip').forEach(c => c.setAttribute('aria-pressed', 'false'));
+    $('#brokenNote').value = '';
+    $('#brokenModal').hidden = false;
+  }
+  $('#brokenKinds').addEventListener('click', e => {
+    const c = e.target.closest('.chip'); if (!c) return;
+    c.setAttribute('aria-pressed', String(c.getAttribute('aria-pressed') !== 'true'));
+  });
+  $('#brokenNo').addEventListener('click', () => { $('#brokenModal').hidden = true; });
+  $('#brokenModal').addEventListener('click', e => { if (e.target.id === 'brokenModal') $('#brokenModal').hidden = true; });
+  $('#brokenYes').addEventListener('click', () => {
+    const p = ptById[brokenFor]; if (!p) return;
+    const kinds = Array.from(document.querySelectorAll('#brokenKinds .chip[aria-pressed="true"]')).map(c => c.dataset.k);
+    const note = $('#brokenNote').value.trim().slice(0, 300);
+    if (!kinds.length && !note) { toast('Изберете коя кофа е счупена или напишете бележка.'); return; }
+    const r = { id: uid(), pid: p.id, route: p.routeName, n: p.n, st: p.st, kind: kinds.join(', '), note, lat: p.ll ? p.lat : null, lon: p.ll ? p.lon : null, at: Date.now(), by: S.name };
+    $('#brokenModal').hidden = true;
+    if (!API) { S.broken.set(p.id, r); toast('Таблицата не е свързана – сигналът остава само на този телефон.'); refresh(); return; }
+    S.reports.push(r); LS.set('obhod.reports', S.reports);
+    if (navigator.vibrate) navigator.vibrate(35);
+    toast('Сигналът е изпратен – Ники ще получи известие.');
+    refresh(); scheduleSync(50);
+  });
 
   // ---------- дневна / нощна карта (сменя се само картата) ----------
   const darkMQ = window.matchMedia ? matchMedia('(prefers-color-scheme: dark)') : null;

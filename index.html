@@ -116,6 +116,27 @@
   </div>
 </div>
 
+<div class="modal" id="brokenModal" hidden>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="brokenTitle">
+    <h2 id="brokenTitle">Счупена кофа</h2>
+    <p class="muted" id="brokenWhere"></p>
+    <div class="seg kinds" id="brokenKinds" role="group" aria-label="Коя кофа">
+      <button type="button" class="chip k-y" data-k="жълта" aria-pressed="false"><i class="dot y"></i>Жълта</button>
+      <button type="button" class="chip k-g" data-k="зелена" aria-pressed="false"><i class="dot g"></i>Зелена</button>
+      <button type="button" class="chip k-b" data-k="синя" aria-pressed="false"><i class="dot b"></i>Синя</button>
+      <button type="button" class="chip" data-k="друга" aria-pressed="false">Друга</button>
+    </div>
+    <div class="other">
+      <label for="brokenNote">Какво има (по желание)</label>
+      <textarea id="brokenNote" rows="2" maxlength="300" placeholder="Напр. счупен капак, липсва колело, изгоряла"></textarea>
+    </div>
+    <div class="row end">
+      <button class="btn" type="button" id="brokenNo">Отказ</button>
+      <button class="btn solid-danger" type="button" id="brokenYes">Изпрати сигнал</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal" id="installModal" hidden>
   <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="installTitle">
     <div class="inst-hd"><img src="icons/icon-192.png" alt="" width="52" height="52"><h2 id="installTitle">Да инсталирам ли приложението?</h2></div>

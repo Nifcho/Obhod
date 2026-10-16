@@ -12,6 +12,11 @@
  *   „Шофьори“  – имената, които приложението предлага (може да се редактира)
  *   „Търговски обекти“ – обектите с координати, адрес, телефон и бележка
  *   „Наряд …“  – по един лист на ден (напр. „Наряд Понеделник“): обектите в реда на обхода
+ *   „Счупени“  – сигнали за счупени кофи от шофьорите; за всеки идва имейл само до собственика.
+ *                Когато кофата е оправена, напишете „Оправено“ в колона „Статус“ – маха се от приложението.
+ *
+ * Първи път след добавянето на сигналите: изберете функцията „probaIzvestie“ горе и натиснете ▶ „Изпълни“,
+ * разрешете достъпа (изпращане на имейл) – ще дойде пробен имейл. После внедрете нова версия.
  *
  * След промяна на този код: Внедряване → Управление на внедряванията → молив →
  * Версия: Нова версия → Внедряване. Адресът /exec остава същият.
@@ -22,6 +27,10 @@ var SHEET_LOG = 'История';
 var SHEET_DRIVERS = 'Шофьори';
 var SHEET_OBJECTS = 'Търговски обекти';
 var NARIAD_PREFIX = 'Наряд';
+var SHEET_BROKEN = 'Счупени';
+// Кой получава известията за счупени кофи. Празно = собственикът на таблицата (който е внедрил скрипта).
+var NOTIFY_TO = '';
+var BROKEN_HEAD = ['Дата и час', 'Маршрут', 'Точка', 'Улица', 'Кофа', 'Бележка', 'Шофьор', 'Карта', 'Статус', 'Известие', 'Код на точката', 'Код на сигнала'];
 
 function doGet(e) {
   return respond_(handle_(e && e.parameter ? e.parameter : {}));
@@ -59,6 +68,22 @@ function handle_(p) {
         lock.releaseLock();
       }
     }
+    var reports = p.reports;
+    if (typeof reports === 'string') { try { reports = JSON.parse(reports); } catch (err) { reports = null; } }
+    if (reports && reports.length) {
+      var lock2 = LockService.getScriptLock();
+      lock2.waitLock(20000);
+      try {
+        var got = [];
+        for (var r = 0; r < reports.length; r++) {
+          if (reports[r] && reports[r].id) { applyReport_(ss, reports[r]); got.push(reports[r].id); }
+        }
+        out.reportsApplied = got;
+      } finally {
+        lock2.releaseLock();
+      }
+    }
+    out.broken = readBroken_(ss);
     out.visits = readState_(ss);
     out.drivers = readDrivers_(ss);
     if (p.action === 'nariad' || p.nariad) out.nariad = readNariad_(ss);
@@ -79,6 +104,12 @@ function ensureSheets_(ss) {
   }
   if (!ss.getSheetByName(SHEET_DRIVERS)) {
     ss.insertSheet(SHEET_DRIVERS).appendRow(['Име']);
+  }
+  if (!ss.getSheetByName(SHEET_BROKEN)) {
+    var b = ss.insertSheet(SHEET_BROKEN);
+    b.appendRow(BROKEN_HEAD);
+    b.setFrozenRows(1);
+    b.getRange(1, 1, 1, BROKEN_HEAD.length).setFontWeight('bold');
   }
 }
 
@@ -184,4 +215,67 @@ function readNariad_(ss) {
     tabs.push({ name: name, values: values });
   }
   return { tabs: tabs, at: Date.now() };
+}
+
+// ---------- сигнали за счупени кофи ----------
+function applyReport_(ss, rp) {
+  var sh = ss.getSheetByName(SHEET_BROKEN);
+  var id = String(rp.id);
+  var n = sh.getLastRow() - 1;
+  if (n > 0) {
+    var ids = sh.getRange(2, 12, n, 1).getValues();
+    for (var i = 0; i < ids.length; i++) if (String(ids[i][0]) === id) return; // вече е записан (повторно изпращане)
+  }
+  var at = new Date(Number(rp.at) || Date.now());
+  var by = String(rp.by || '').slice(0, 60);
+  var map = (rp.lat && rp.lon) ? 'https://www.google.com/maps?q=' + rp.lat + ',' + rp.lon : '';
+  var row = [at, rp.route || '', String(rp.n || ''), rp.st || '', rp.kind || '', String(rp.note || '').slice(0, 500), by, map, 'Ново', '', String(rp.pid || ''), id];
+  sh.appendRow(row);
+  var last = sh.getLastRow();
+  var status;
+  try { notifyBroken_(ss, rp, at, by, map); status = 'Изпратено ' + Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'dd.MM HH:mm'); }
+  catch (err) { status = 'Грешка: ' + String(err).slice(0, 200); }
+  sh.getRange(last, 10).setValue(status);
+}
+
+function notifyTo_() {
+  return NOTIFY_TO || Session.getEffectiveUser().getEmail();
+}
+
+function notifyBroken_(ss, rp, at, by, map) {
+  var tz = ss.getSpreadsheetTimeZone();
+  var where = (rp.route || '') + ', т. ' + (rp.n || '') + (rp.st ? ' – ' + rp.st : '');
+  var subject = 'Счупена кофа: ' + where;
+  var lines = [
+    'Счупена кофа: ' + (rp.kind || 'не е посочено коя'),
+    'Място: ' + where,
+    'Подаде: ' + (by || '—') + ', ' + Utilities.formatDate(at, tz, 'dd.MM.yyyy HH:mm')
+  ];
+  if (rp.note) lines.push('Бележка: ' + rp.note);
+  if (map) lines.push('Карта: ' + map);
+  lines.push('', 'Всички сигнали: ' + ss.getUrl() + '#gid=' + ss.getSheetByName(SHEET_BROKEN).getSheetId());
+  lines.push('Когато е оправено, напишете „Оправено“ в колона „Статус“.');
+  MailApp.sendEmail({ to: notifyTo_(), subject: subject, body: lines.join('\n'), name: 'Обход на точките' });
+}
+
+function readBroken_(ss) {
+  var sh = ss.getSheetByName(SHEET_BROKEN);
+  var n = sh.getLastRow() - 1;
+  if (n < 1) return [];
+  var rows = sh.getRange(2, 1, n, 12).getValues();
+  var out = [];
+  for (var i = 0; i < rows.length; i++) {
+    var st = String(rows[i][8] || '').toLowerCase();
+    if (st.indexOf('оправ') === 0 || st.indexOf('готов') === 0 || st.indexOf('сменен') === 0) continue;
+    if (!rows[i][10]) continue;
+    out.push({ pid: String(rows[i][10]), at: toMs_(rows[i][0]), kind: String(rows[i][4] || ''), note: String(rows[i][5] || ''), by: String(rows[i][6] || '') });
+  }
+  return out;
+}
+
+// Пусни веднъж от редактора (▶ Изпълни), за да разрешиш изпращането на имейли и да видиш пробно известие.
+function probaIzvestie() {
+  var ss = SpreadsheetApp.getActive();
+  ensureSheets_(ss);
+  MailApp.sendEmail({ to: notifyTo_(), subject: 'Проба: известия за счупени кофи', body: 'Известията от „Обход на точките“ работят. Ще идват на този адрес: ' + notifyTo_(), name: 'Обход на точките' });
 }
