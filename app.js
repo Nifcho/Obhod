@@ -269,7 +269,12 @@
     return out;
   }
   let NAR = null, narSig = '', narBusy = false, narLast = 0, narErr = false, started = false;
-  function builtinNariad() { return { src: 'builtin', at: 0, days: withWeek(TURG_BUILTIN.length ? [{ name: 'Сряда', pts: TURG_BUILTIN }] : []) }; }
+  // Запис на листовете, вграден в data.js – ползва се, докато таблицата не е достъпна (или скриптът не е обновен).
+  const SNAP = window.NARIAD_SNAPSHOT && window.NARIAD_SNAPSHOT.tabs ? window.NARIAD_SNAPSHOT : null;
+  function builtinNariad() {
+    if (SNAP) { const n = parseNariad(SNAP); n.src = 'snapshot'; n.at = Number(SNAP.at) || 0; return n; }
+    return { src: 'builtin', at: 0, days: withWeek(TURG_BUILTIN.length ? [{ name: 'Сряда', pts: TURG_BUILTIN }] : []) };
+  }
   const dayOf = name => NAR && NAR.days.find(d => d.name === name);
   function todayDay() {
     if (!NAR) return null;
@@ -564,6 +569,7 @@
     const st = el('button', 'stamp'); st.type = 'button'; st.dataset.act = 'nariad';
     st.title = 'Обнови наряда от таблицата';
     if (!API) st.hidden = true;
+    else if (NAR.src === 'snapshot') st.textContent = '↻ запис ' + fmtWhen(NAR.at);
     else if (NAR.src !== 'sheet') st.textContent = narBusy ? '↻ …' : '↻ вграден';
     else st.textContent = (narErr === true ? '↻ без връзка ' : '↻ ') + fmtWhen(NAR.at);
     lbl.textContent = ''; lbl.append(txt, st);
@@ -924,7 +930,7 @@
   // ---------- start ----------
   if (TURG) {
     const cached = LS.get('obhod.nariad', null);
-    if (cached && cached.tabs) setNariad(cached);
+    if (cached && cached.tabs && (!SNAP || (Number(cached.at) || 0) >= (Number(SNAP.at) || 0))) setNariad(cached);
     if (!NAR) NAR = builtinNariad();
     applyTurg();
   }
