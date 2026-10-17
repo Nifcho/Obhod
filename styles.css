@@ -216,7 +216,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
 .other { display: grid; gap: 6px; }
 .other label { font: 600 13px var(--f-cond); color: var(--muted); }
 .row.end, .other .row { display: flex; gap: 8px; border: 0; overflow: visible; background: none; }
-.row.end { justify-content: flex-end; }
+.row.end { justify-content: flex-end; flex-wrap: wrap; }
 .other input { flex: 1; min-width: 0; min-height: 46px; border-radius: 11px; border: 1px solid var(--line); padding: 0 12px; font: 16px var(--f-body); background: var(--bg); color: var(--ink); }
 
 .inst-hd { display: flex; align-items: center; gap: 12px; }
@@ -255,3 +255,9 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
 @media (prefers-color-scheme: dark) { :root:not([data-map="light"]) .trkflag { color: #120e1d; } }
 #trkBtn[aria-pressed="true"] { color: #7a56e0; }
 #trkBtn[aria-pressed="false"] { color: var(--muted); }
+/* точка от другия наряд по маршрута – натиска се, за да прехвърли */
+.trkxfer { position: absolute; left: 0; top: 0; transform: translate(-7px, -50%); display: flex; align-items: center; gap: 5px; cursor: pointer; }
+.trkxfer i { width: 14px; height: 14px; border-radius: 50%; background: var(--trk-case); border: 3px solid var(--trk); box-sizing: border-box; flex: none; }
+.trkxfer span { padding: 3px 8px; border-radius: 999px; background: var(--trk); color: #fff; font: 700 12px/16px var(--f-cond); white-space: nowrap; box-shadow: 0 1px 5px rgba(0,0,0,.35); }
+:root[data-map="dark"] .trkxfer span { color: #120e1d; }
+@media (prefers-color-scheme: dark) { :root:not([data-map="light"]) .trkxfer span { color: #120e1d; } }
