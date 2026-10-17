@@ -371,11 +371,11 @@
   const markerLayer = L.layerGroup().addTo(map);
   let markers = {};
   let meMarker = null, accCircle = null;
-  let nearInfo = null;
+  let nearInfo = null, tnext = null;
 
   function iconFor(p) {
     const d = V.has(p.id);
-    const cls = ['pin', p.shape, d ? 'done' : '', brokenOf(p.id) ? 'brk' : '', S.sel === p.id ? 'sel' : '', (!d && nearInfo && nearInfo.p === p) ? 'near' : '', p.n.length > 3 ? 'n5' : (p.n.length > 2 ? 'n3' : '')].join(' ');
+    const cls = ['pin', p.shape, d ? 'done' : '', brokenOf(p.id) ? 'brk' : '', S.sel === p.id ? 'sel' : '', (!d && !tnext && nearInfo && nearInfo.p === p) ? 'near' : '', (!d && tnext && tnext.p === p) ? 'nxt' : '', p.n.length > 3 ? 'n5' : (p.n.length > 2 ? 'n3' : '')].join(' ');
     return L.divIcon({ className: '', html: `<div class="pinbox"><div class="${cls}"><span>${p.n}</span></div></div>`, iconSize: [32, 32], iconAnchor: [16, 16] });
   }
   function buildMarkers() {
@@ -406,6 +406,107 @@
   map.on('dragstart', () => { if (S.follow) setFollow(false); });
   function zoomClass() { const z = map.getZoom(), c = map.getContainer(); c.classList.toggle('zlow', z < 15.5); c.classList.toggle('zmid', z >= 15.5 && z < 16.5); }
   map.on('zoomend', zoomClass); zoomClass();
+
+  // ---------- маршрут при каране (приблизителен, от GPS запис на обхода) ----------
+  // r.trk = { seq: [id по реда на обхода], legs: [път от seq[k] до seq[k+1] като Google polyline, '' = прекъсване] }
+  // Изминатото е сиво на точки, следващият отсечек е ярко син, останалото – светлосиньо със стрелки за посоката.
+  S.trk = LS.get('obhod.trk', true) !== false;
+  const trkLayer = L.layerGroup().addTo(map);
+  let trkSig = '';
+  function decodePoly(s) {
+    const out = []; let i = 0, la = 0, lo = 0;
+    while (i < s.length) {
+      for (let k = 0; k < 2; k++) {
+        let b, sh = 0, r = 0;
+        do { b = s.charCodeAt(i++) - 63; r |= (b & 31) << sh; sh += 5; } while (b >= 32 && i < s.length);
+        const v = (r & 1) ? ~(r >> 1) : (r >> 1);
+        if (k === 0) la += v; else lo += v;
+      }
+      out.push([la / 1e5, lo / 1e5]);
+    }
+    return out;
+  }
+  function trkSeq(r) {
+    const t = r.trk;
+    if (!t._seq) {
+      t._seq = t.seq.map(id => ptById[id]).filter(Boolean);
+      t._legs = t.legs.map(s => (s ? decodePoly(s) : null));
+      t._seq.forEach((p, i) => { p.seq = i; });
+    }
+    return t._seq;
+  }
+  const trkOn = r => !!(r && r.trk && S.trk);
+  // следващата точка: първата немината след последно отметнатата (по време)
+  function trkNext(r) {
+    if (!r || !r.trk) return null;
+    const seq = trkSeq(r), n = seq.length;
+    let from = -1, at = -1;
+    seq.forEach((p, i) => { const v = V.get(p.id); if (v && v.at > at) { at = v.at; from = i; } });
+    for (let k = 1; k <= n; k++) { const i = (from + k) % n; if (!V.has(seq[i].id) && seq[i].ll) return { p: seq[i], i, from }; }
+    return null;
+  }
+  function trkUpcoming(r, k) {
+    const tn = trkNext(r); if (!tn) return [];
+    const seq = trkSeq(r), out = [];
+    for (let j = 0; j < seq.length && out.length < k; j++) { const p = seq[(tn.i + j) % seq.length]; if (!V.has(p.id) && p.ll) out.push(p); }
+    return out;
+  }
+  // стрелки (шеврони) по линията през gap пиксела – смятат се наново при всяко мащабиране
+  function trkArrows(lines, gap, h) {
+    const z = map.getZoom(), out = [];
+    for (const ln of lines) {
+      const P = ln.map(ll => map.project(ll, z)), cum = [0];
+      for (let i = 1; i < P.length; i++) cum.push(cum[i - 1] + P[i].distanceTo(P[i - 1]));
+      const total = cum[cum.length - 1];
+      if (total < 22) continue;
+      let i = 1;
+      for (let s = total < gap ? total / 2 : gap / 2; s < total; s += gap) {
+        while (i < P.length - 1 && cum[i] < s) i++;
+        const a = P[i - 1], b = P[i], sl = (cum[i] - cum[i - 1]) || 1, t = (s - cum[i - 1]) / sl;
+        const x = a.x + (b.x - a.x) * t, y = a.y + (b.y - a.y) * t, dx = (b.x - a.x) / sl, dy = (b.y - a.y) / sl;
+        const pt = (u, v) => map.unproject(L.point(x + dx * u - dy * v, y + dy * u + dx * v), z);
+        out.push([pt(-h * .7, -h), pt(h * .6, 0), pt(-h * .7, h)]);
+      }
+    }
+    return out;
+  }
+  function trkFlag(p, txt) {
+    const icon = L.divIcon({ className: '', html: `<div class="trkflag">${txt}</div>`, iconSize: [0, 0], iconAnchor: [0, 0] });
+    L.marker([p.lat, p.lon], { icon, interactive: false, keyboard: false, zIndexOffset: 900 }).addTo(trkLayer);
+  }
+  function drawTrack() {
+    const r = cur(), on = trkOn(r);
+    $('#trkBtn').hidden = !(r && r.trk);
+    $('#trkBtn').setAttribute('aria-pressed', String(on));
+    $('#trkBtn').setAttribute('aria-label', on ? 'Скрий маршрута' : 'Покажи маршрута');
+    const seq = on ? trkSeq(r) : [];
+    const sig = on ? [r.key, map.getZoom(), tnext ? tnext.i + ':' + tnext.from : '-', seq.map(p => (V.has(p.id) ? 1 : 0)).join('')].join('|') : 'off';
+    if (sig === trkSig) return;
+    trkSig = sig; trkLayer.clearLayers();
+    if (!on) return;
+    const legs = r.trk._legs;
+    const cls = legs.map((lg, k) => (!lg ? null : (V.has(seq[k].id) && V.has(seq[k + 1].id) ? 'done' : 'rem')));
+    if (tnext && tnext.from >= 0 && tnext.from < tnext.i) for (let k = tnext.from; k < tnext.i; k++) if (legs[k]) cls[k] = 'next';
+    const lines = { done: [], rem: [], next: [] };
+    legs.forEach((lg, k) => {
+      const c = cls[k]; if (!c) return;
+      const arr = lines[c];
+      if (k > 0 && cls[k - 1] === c) arr[arr.length - 1] = arr[arr.length - 1].concat(lg.slice(1)); else arr.push(lg.slice());
+    });
+    const z = map.getZoom(), w = z >= 16.5 ? 1 : (z >= 15 ? .85 : .7);
+    if (lines.done.length) L.polyline(lines.done, { className: 'trk-done', weight: 4 * w, interactive: false }).addTo(trkLayer);
+    for (const c of ['rem', 'next']) {
+      if (!lines[c].length) continue;
+      const wt = (c === 'next' ? 7.5 : 5.5) * w;
+      L.polyline(lines[c], { className: 'trk-case', weight: wt + 3.5, interactive: false }).addTo(trkLayer);
+      L.polyline(lines[c], { className: 'trk-' + c, weight: wt, interactive: false }).addTo(trkLayer);
+      const ar = trkArrows(lines[c], c === 'next' ? 50 : 72, wt * .78);
+      if (ar.length) L.polyline(ar, { className: 'trk-arr', weight: Math.max(1.8, wt * .34), interactive: false, fill: false }).addTo(trkLayer);
+    }
+    if (!seq.some(p => V.has(p.id)) && seq.length) { trkFlag(seq[0], 'Начало'); trkFlag(seq[seq.length - 1], 'Край'); }
+    if (!LS.get('obhod.trkHint', 0)) { LS.set('obhod.trkHint', 1); setTimeout(() => toast('Лилавата линия е приблизителният маршрут. Следващият отсечек е по-ярък.'), 2500); }
+  }
+  map.on('zoomend', drawTrack);
 
   // ---------- location ----------
   // Screen stays on the whole time the app is open.
@@ -534,6 +635,7 @@
     const left = r.ordered.filter(p => !V.has(p.id) && p.ll);
     let seq = [];
     if (r.kind === 'turg') seq = left.slice(0, 4);
+    else if (trkOn(r)) seq = trkUpcoming(r, 4);
     else if (S.pos && left.length) {
       let here = S.pos; const pool = left.slice();
       while (seq.length < 4 && pool.length) {
@@ -595,6 +697,7 @@
     let p = null, label = '', d = null, selected = false;
     if (S.sel && ptById[S.sel] && ptById[S.sel].route === S.route) { p = ptById[S.sel]; label = 'Избрана точка'; selected = true; }
     else if (r.kind === 'turg') { p = r.ordered.find(q => !V.has(q.id)) || null; label = 'Следващ по наряда'; }
+    else if (tnext && !(nearInfo && nearInfo.p !== tnext.p && nearInfo.d <= 40)) { p = tnext.p; label = 'Следваща по маршрута'; }
     else if (nearInfo) { p = nearInfo.p; label = 'Най-близо'; }
     else { p = r.ordered.find(q => !V.has(q.id)) || null; label = 'Следваща'; }
     if (!p) {
@@ -660,8 +763,11 @@
     $('#fAll').textContent = 'Всички ' + r.pts.length;
     $('#fDone').textContent = 'Минати ' + done;
     document.querySelectorAll('[data-f]').forEach(c => c.setAttribute('aria-pressed', String(c.dataset.f === S.filter)));
-    document.querySelectorAll('[data-s]').forEach(c => c.setAttribute('aria-pressed', String(c.dataset.s === S.sort)));
+    $('#sRoute').hidden = !r.trk;
+    const so = sortOf(r);
+    document.querySelectorAll('[data-s]').forEach(c => c.setAttribute('aria-pressed', String(c.dataset.s === so)));
   }
+  const sortOf = r => (S.sort === 'route' && !r.trk ? 'num' : S.sort);
   function renderList() {
     const r = cur(), ul = $('#list'); ul.textContent = '';
     let pts = r.ordered;
@@ -672,6 +778,11 @@
       return;
     }
     const multi = r.groups.length > 1;
+    if (sortOf(r) === 'route') {
+      const inList = new Set(pts);
+      trkSeq(r).filter(p => inList.has(p)).forEach(p => ul.append(rowEl(p, multi)));
+      return;
+    }
     if (S.sort === 'near' && S.pos) {
       pts.slice().sort((a, b) => (a.ll ? distM(S.pos, a) : 1e12) - (b.ll ? distM(S.pos, b) : 1e12)).forEach(p => ul.append(rowEl(p, multi)));
       return;
@@ -691,7 +802,10 @@
   }
   function refresh() {
     computeVisits();
-    renderRoutes(); renderWho(); renderSync(); renderSummary(); renderCard(); renderFilters(); renderList(); updateMarkers();
+    tnext = trkOn(cur()) ? trkNext(cur()) : null;
+    renderRoutes(); renderWho(); renderSync(); renderSummary(); renderCard(); renderFilters(); renderList(); updateMarkers(); drawTrack();
+    $('#trkFoot').hidden = !cur().trk;
+    if (cur().trk) $('#trkFoot').textContent = 'Лилавата линия е приблизителният маршрут по ' + cur().trk.src + '. Скрива се с бутона вдясно на картата.';
   }
 
   // ---------- actions ----------
@@ -787,6 +901,11 @@
     }
     setFollow(!S.follow);
     if (S.follow) toast('Картата следва колата.');
+  });
+  $('#trkBtn').addEventListener('click', () => {
+    S.trk = !S.trk; LS.set('obhod.trk', S.trk);
+    refresh();
+    toast(S.trk ? 'Маршрутът е показан.' : 'Маршрутът е скрит.');
   });
   $('#fitBtn').addEventListener('click', () => {
     const left = cur().pts.filter(p => !V.has(p.id));

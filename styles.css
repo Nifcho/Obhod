@@ -234,3 +234,24 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
   .sheet .sheet-body { display: flex; }
 }
 @media (prefers-reduced-motion: reduce) { .sheet, .prog i { transition: none; } }
+
+/* ---------- маршрут при каране ---------- */
+:root { --trk: #6236d0; --trk-rem: #7a56e0; --trk-case: #ffffff; --trk-done: #6f7780; }
+:root[data-map="dark"] { --trk: #b39bff; --trk-rem: #9a7ff5; --trk-case: #120e1d; --trk-done: #a3abb4; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-map="light"]) { --trk: #b39bff; --trk-rem: #9a7ff5; --trk-case: #120e1d; --trk-done: #a3abb4; }
+}
+.leaflet-overlay-pane path.trk-case { stroke: var(--trk-case); stroke-opacity: .85; }
+.leaflet-overlay-pane path.trk-rem { stroke: var(--trk-rem); stroke-opacity: .62; }
+.leaflet-overlay-pane path.trk-next { stroke: var(--trk); stroke-opacity: 1; }
+.leaflet-overlay-pane path.trk-arr { stroke: #fff; stroke-opacity: .95; fill: none; }
+.leaflet-overlay-pane path.trk-done { stroke: var(--trk-done); stroke-opacity: .6; stroke-dasharray: 0.1 8; }
+.pin.nxt { box-shadow: 0 0 0 4px var(--trk), 0 2px 6px rgba(0,0,0,.35); }
+.pin.nxt::before { content: ""; position: absolute; inset: -4px; border-radius: inherit; border: 3px solid var(--trk); animation: nxtp 1.8s ease-out infinite; pointer-events: none; }
+@keyframes nxtp { from { transform: scale(1); opacity: .8; } to { transform: scale(1.7); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .pin.nxt::before { animation: none; opacity: 0; } }
+.trkflag { position: absolute; left: 0; bottom: 19px; transform: translateX(-50%); padding: 2px 7px; border-radius: 999px; background: var(--trk); color: #fff; font: 700 11px/15px var(--f-cond); letter-spacing: .02em; white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,.3); pointer-events: none; }
+:root[data-map="dark"] .trkflag { color: #120e1d; }
+@media (prefers-color-scheme: dark) { :root:not([data-map="light"]) .trkflag { color: #120e1d; } }
+#trkBtn[aria-pressed="true"] { color: #7a56e0; }
+#trkBtn[aria-pressed="false"] { color: var(--muted); }
