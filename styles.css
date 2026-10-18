@@ -1,43 +1,63 @@
-/* Layout: header with routes, full-height map, bottom sheet with summary, current point and list. */
+/* Вид в стила на alara.bg: червено, бяло, черно; шрифт Montserrat с българските форми на буквите.
+   Интерфейсът следва телефона: денем бяла глава, нощем черна. Точките и маршрутът следват картата:
+   на дневната карта – черни точки и червен маршрут, на нощната – червени точки и бял маршрут. */
+@font-face { font-family: "Montserrat"; font-style: normal; font-weight: 100 900; font-display: swap; src: url(fonts/montserrat-cyrillic-wght-normal.woff2) format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: "Montserrat"; font-style: normal; font-weight: 100 900; font-display: swap; src: url(fonts/montserrat-latin-wght-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 :root {
-  --bg: #eef1ec; --surface: #ffffff; --ink: #18211c; --muted: #5a675f; --line: #d4dbd4;
-  --accent: #17663f; --accent-ink: #ffffff; --accent-soft: #dcebe1;
-  --sel: #d4841a; --danger: #b23a2a; --me: #1f6fe0;
-  --done-fill: #c4ccc6; --done-ink: #56625b;
+  --red: #E4101C; --warn: #E8930C; --ok: #15803d;
+  --bg: #f4f4f5; --surface: #ffffff; --ink: #0C0C0C; --muted: #5c5f66; --line: #e4e4e7;
+  --accent: var(--red); --accent-ink: #ffffff; --accent-soft: #fde7e8;
+  --sel: var(--red); --danger: var(--red); --me: #1f6fe0;
+  --done-fill: #d9d9dd; --done-ink: #6b6e75;
   --plastic: #eebf2b; --glass: #2c8a4b;
-  --shadow: 0 10px 28px rgba(20, 35, 26, .2);
-  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-  --f-cond: "IBM Plex Sans Condensed", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
+  --num: #0C0C0C; --num-ink: #ffffff; --trk-btn: var(--red);
+  --head: #ffffff; --head-ink: #0C0C0C; --head-line: #e4e4e7; --sel-bg: #ffffff; --sel-ink: #0C0C0C; --sel-line: #e4e4e7;
+  --shadow: 0 8px 24px rgba(12, 12, 12, .14);
+  --f-body: "Montserrat", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --f-cond: var(--f-body);
   color-scheme: light;
 }
 /* Тъмни цветове на приложението – по настройката на телефона. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-  --bg: #0e1311; --surface: #161d19; --ink: #e3eae5; --muted: #93a198; --line: #28322c;
-  --accent: #3fb877; --accent-ink: #06130b; --accent-soft: #17301f;
-  --sel: #f0a43a; --danger: #e57563; --me: #5aa2ff;
-  --done-fill: #39433d; --done-ink: #9aa69f;
+  --red: #FF2E38; --ok: #4ade80;
+  --bg: #0b0b0c; --surface: #161618; --ink: #f4f4f5; --muted: #a1a1aa; --line: #2b2b2f;
+  --accent-soft: #3a1416; --sel: #f4f4f5; --danger: #FF4D55;
+  --done-fill: #3a3a3e; --done-ink: #a1a1aa;
   --plastic: #e3b628; --glass: #3aa35f;
-  --shadow: 0 10px 28px rgba(0, 0, 0, .55);
+  --num: var(--red); --num-ink: #ffffff; --trk-btn: #f4f4f5;
+  --head: #000000; --head-ink: #f4f4f5; --head-line: #1f1f22; --sel-bg: #1f1f22; --sel-ink: #f4f4f5; --sel-line: #2f2f33;
+  --shadow: 0 8px 24px rgba(0, 0, 0, .55);
   color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0e1311; --surface: #161d19; --ink: #e3eae5; --muted: #93a198; --line: #28322c;
-  --accent: #3fb877; --accent-ink: #06130b; --accent-soft: #17301f;
-  --sel: #f0a43a; --danger: #e57563; --me: #5aa2ff;
-  --done-fill: #39433d; --done-ink: #9aa69f;
+  --red: #FF2E38; --ok: #4ade80;
+  --bg: #0b0b0c; --surface: #161618; --ink: #f4f4f5; --muted: #a1a1aa; --line: #2b2b2f;
+  --accent-soft: #3a1416; --sel: #f4f4f5; --danger: #FF4D55;
+  --done-fill: #3a3a3e; --done-ink: #a1a1aa;
   --plastic: #e3b628; --glass: #3aa35f;
-  --shadow: 0 10px 28px rgba(0, 0, 0, .55);
+  --num: var(--red); --num-ink: #ffffff; --trk-btn: #f4f4f5;
+  --head: #000000; --head-ink: #f4f4f5; --head-line: #1f1f22; --sel-bg: #1f1f22; --sel-ink: #f4f4f5; --sel-line: #2f2f33;
+  --shadow: 0 8px 24px rgba(0, 0, 0, .55);
   color-scheme: dark;
+}
+/* Точките и маршрутът – по картата (дневна / нощна, сменя се и с бутона). */
+:root { --pin: #0C0C0C; --pin-ink: #ffffff; --pin-line: #ffffff; --pin-done: #d9d9dd; --pin-done-ink: #6b6e75; --pin-sel: #E4101C;
+  --trk: #E4101C; --trk-rem: #E4101C; --trk-rem-op: .45; --trk-case: #ffffff; --trk-done: #8a8d93; --trk-ink: #ffffff; }
+:root[data-map="dark"] { --pin: #FF2E38; --pin-ink: #ffffff; --pin-line: #0C0C0C; --pin-done: #3a3a3e; --pin-done-ink: #a1a1aa; --pin-sel: #ffffff;
+  --trk: #ffffff; --trk-rem: #ffffff; --trk-rem-op: .32; --trk-case: #0C0C0C; --trk-done: #8a8d93; --trk-ink: #0C0C0C; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-map="light"]) { --pin: #FF2E38; --pin-ink: #ffffff; --pin-line: #0C0C0C; --pin-done: #3a3a3e; --pin-done-ink: #a1a1aa; --pin-sel: #ffffff;
+    --trk: #ffffff; --trk-rem: #ffffff; --trk-rem-op: .32; --trk-case: #0C0C0C; --trk-done: #8a8d93; --trk-ink: #0C0C0C; }
 }
 /* Нощна карта: по настройката на телефона или ръчно с бутона (data-map на <html>) – сменя се само картата. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-map="light"]) .leaflet-tile { filter: invert(1) hue-rotate(180deg) brightness(.85) contrast(.9) saturate(.6); }
-  :root:not([data-map="light"]) .leaflet-container { background: #111714; }
+  :root:not([data-map="light"]) .leaflet-container { background: #111214; }
 }
 :root[data-map="dark"] .leaflet-tile { filter: invert(1) hue-rotate(180deg) brightness(.85) contrast(.9) saturate(.6); }
-:root[data-map="dark"] .leaflet-container { background: #111714; }
+:root[data-map="dark"] .leaflet-container { background: #111214; }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html, body { height: 100%; margin: 0; }
@@ -236,13 +256,8 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
 @media (prefers-reduced-motion: reduce) { .sheet, .prog i { transition: none; } }
 
 /* ---------- маршрут при каране ---------- */
-:root { --trk: #6236d0; --trk-rem: #7a56e0; --trk-case: #ffffff; --trk-done: #6f7780; }
-:root[data-map="dark"] { --trk: #b39bff; --trk-rem: #9a7ff5; --trk-case: #120e1d; --trk-done: #a3abb4; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-map="light"]) { --trk: #b39bff; --trk-rem: #9a7ff5; --trk-case: #120e1d; --trk-done: #a3abb4; }
-}
 .leaflet-overlay-pane path.trk-case { stroke: var(--trk-case); stroke-opacity: .85; }
-.leaflet-overlay-pane path.trk-rem { stroke: var(--trk-rem); stroke-opacity: .62; }
+.leaflet-overlay-pane path.trk-rem { stroke: var(--trk-rem); stroke-opacity: var(--trk-rem-op); }
 .leaflet-overlay-pane path.trk-next { stroke: var(--trk); stroke-opacity: 1; }
 .leaflet-overlay-pane path.trk-arr { stroke: #fff; stroke-opacity: .95; fill: none; }
 .leaflet-overlay-pane path.trk-done { stroke: var(--trk-done); stroke-opacity: .6; stroke-dasharray: 0.1 8; }
@@ -250,14 +265,69 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
 .pin.nxt::before { content: ""; position: absolute; inset: -4px; border-radius: inherit; border: 3px solid var(--trk); animation: nxtp 1.8s ease-out infinite; pointer-events: none; }
 @keyframes nxtp { from { transform: scale(1); opacity: .8; } to { transform: scale(1.7); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .pin.nxt::before { animation: none; opacity: 0; } }
-.trkflag { position: absolute; left: 0; bottom: 19px; transform: translateX(-50%); padding: 2px 7px; border-radius: 999px; background: var(--trk); color: #fff; font: 700 11px/15px var(--f-cond); letter-spacing: .02em; white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,.3); pointer-events: none; }
-:root[data-map="dark"] .trkflag { color: #120e1d; }
-@media (prefers-color-scheme: dark) { :root:not([data-map="light"]) .trkflag { color: #120e1d; } }
-#trkBtn[aria-pressed="true"] { color: #7a56e0; }
+.trkflag { position: absolute; left: 0; bottom: 19px; transform: translateX(-50%); padding: 2px 8px; border-radius: 999px; background: var(--trk); color: var(--trk-ink); font: 800 11px/15px var(--f-body); letter-spacing: .02em; white-space: nowrap; box-shadow: 0 1px 4px rgba(0,0,0,.3); pointer-events: none; }
+#trkBtn[aria-pressed="true"] { color: var(--trk-btn); }
 #trkBtn[aria-pressed="false"] { color: var(--muted); }
 /* точка от другия наряд по маршрута – натиска се, за да прехвърли */
 .trkxfer { position: absolute; left: 0; top: 0; transform: translate(-7px, -50%); display: flex; align-items: center; gap: 5px; cursor: pointer; }
 .trkxfer i { width: 14px; height: 14px; border-radius: 50%; background: var(--trk-case); border: 3px solid var(--trk); box-sizing: border-box; flex: none; }
-.trkxfer span { padding: 3px 8px; border-radius: 999px; background: var(--trk); color: #fff; font: 700 12px/16px var(--f-cond); white-space: nowrap; box-shadow: 0 1px 5px rgba(0,0,0,.35); }
-:root[data-map="dark"] .trkxfer span { color: #120e1d; }
-@media (prefers-color-scheme: dark) { :root:not([data-map="light"]) .trkxfer span { color: #120e1d; } }
+.trkxfer span { padding: 3px 9px; border-radius: 999px; background: var(--trk); color: var(--trk-ink); font: 800 12px/16px var(--f-body); white-space: nowrap; box-shadow: 0 1px 5px rgba(0,0,0,.35); }
+
+/* ---------- в стила на alara.bg ---------- */
+body { font-weight: 500; letter-spacing: -.005em; }
+.bar { background: var(--head); border-bottom-color: var(--head-line); padding-left: 10px; }
+.brand { flex: none; display: flex; align-items: center; }
+.brand svg { width: 34px; height: 29.5px; fill: var(--red); stroke: none; }
+.routesel select { background: var(--sel-bg); color: var(--sel-ink); border: 1px solid var(--sel-line); border-radius: 14px; font: 700 16.5px var(--f-body); letter-spacing: -.01em; padding-left: 14px; }
+.routesel svg { stroke: var(--red); stroke-width: 2.6; }
+.who { border-radius: 14px; font: 700 14px var(--f-body); background: transparent; color: var(--head-ink); border-color: var(--sel-line); }
+.who svg { color: var(--red); }
+.who.need { border-color: var(--red); color: var(--red); }
+.btn { border-radius: 14px; font: 700 15px var(--f-body); letter-spacing: -.01em; }
+.btn svg { color: var(--red); }
+.btn.primary { background: var(--red); color: #fff; }
+.btn.primary svg { color: #fff; }
+.btn.solid-danger { background: var(--red); }
+.btn.brkbtn { color: var(--ink); border-style: solid; }
+.btn.brkbtn svg { color: var(--warn); }
+.card { border-radius: 16px; padding: 14px; }
+.card .lbl { font: 700 11.5px var(--f-body); letter-spacing: .06em; align-items: center; }
+.card .lbl > span:first-child { display: inline-flex; align-items: center; gap: 8px; }
+.card .lbl > span:first-child::before { content: ""; width: 22px; height: 3px; border-radius: 2px; background: var(--red); flex: none; }
+.card .lbl .x { font: 700 11.5px var(--f-body); }
+.card .st { font-weight: 700; letter-spacing: -.01em; }
+.card .dist { font: 800 19px var(--f-body); color: var(--ink); }
+.num { background: var(--num); color: var(--num-ink); font: 800 15px var(--f-body); }
+.count { font: 600 14px var(--f-body); }
+.count b { color: var(--ink); font-weight: 800; }
+.yel { font: 600 13px var(--f-body); }
+.prog i { background: var(--red); }
+.chip { font: 700 13.5px var(--f-body); }
+.chip.day.today::after { background: var(--red); }
+#dayLbl.warn .daytxt, .noll { color: var(--warn); }
+.sync { font: 600 12px var(--f-body); }
+.sync[data-mode="live"] i { background: #16a34a; }
+.sync[data-mode="pending"] i, .sync[data-mode="offline"] i, .sync[data-mode="local"] i { background: var(--warn); }
+.fab { border-radius: 14px; }
+.when { color: var(--ok); }
+.grp, .link, .navapp b, .names button, .stamp, .tag, .brkmark, .other label { font-family: var(--f-body); }
+.dialog h2 { font: 800 20px var(--f-body); letter-spacing: -.01em; }
+.pin { background: var(--pin); color: var(--pin-ink); border-color: var(--pin-line); font: 800 12.5px var(--f-body); letter-spacing: -.02em; }
+.pin.n3 { font-size: 11px; }
+.zmid .pin { font-size: 11.5px; }
+.pin.done { background: var(--pin-done); color: var(--pin-done-ink); }
+.pin.sel { box-shadow: 0 0 0 4px var(--pin-sel), 0 2px 6px rgba(0,0,0,.35); }
+.pin.brk::after { background: #F5A300; color: #0C0C0C; }
+/* Montserrat е по-широк: прозорците не бива да излизат извън екрана, тесните екрани – по-малък текст */
+.dialog { min-width: 0; grid-template-columns: minmax(0, 1fr); }
+.names button { white-space: normal; line-height: 1.2; font-size: 15px; }
+.yel { white-space: nowrap; }
+@media (max-width: 400px) {
+  .routesel select { font-size: 15.5px; padding-right: 36px; padding-left: 12px; }
+  .routesel svg { right: 10px; }
+  .who { gap: 4px; padding: 0 8px; font-size: 13px; }
+  .count { font-size: 13px; } .count b { font-size: 22px; }
+  .yel { font-size: 12px; gap: 4px; }
+}
+@media (max-width: 370px) { .who svg { display: none; } }
+.other { grid-template-columns: minmax(0, 1fr); } .other input { width: 0; }
