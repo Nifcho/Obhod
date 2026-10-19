@@ -331,3 +331,12 @@ body { font-weight: 500; letter-spacing: -.005em; }
 }
 @media (max-width: 370px) { .who svg { display: none; } }
 .other { grid-template-columns: minmax(0, 1fr); } .other input { width: 0; }
+/* ---------- навигация: завъртяна карта ---------- */
+#map.navrot { transform: rotate(calc(var(--brg, 0deg) * -1)); will-change: transform; }
+#map.navrot.brg-anim { transition: transform .9s linear; }
+#map.navrot .pinbox, #map.navrot .upr { transform: rotate(var(--brg, 0deg)); }
+#map.navrot.brg-anim .pinbox, #map.navrot.brg-anim .upr { transition: transform .9s linear; }
+.upr { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+.fab[data-state="nav"] { background: var(--me); color: #fff; border-color: transparent; }
+.navattr { position: absolute; left: 0; bottom: 0; z-index: 450; padding: 1px 5px; font-size: 10px; background: rgba(255,255,255,.8); color: #333; }
+.navattr a { color: #0078a8; }

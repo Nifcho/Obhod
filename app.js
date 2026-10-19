@@ -16,6 +16,8 @@
     off: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/></svg>',
     on: '<svg viewBox="0 0 24 24" aria-hidden="true" style="stroke-width:2.6"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
     warn: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9.5 17h-19z"/><path d="M12 10v4.5M12 17.5v.5"/></svg>',
+    loc: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/></svg>',
+    navmode: '<svg viewBox="0 0 24 24" aria-hidden="true" style="fill:currentColor;stroke-width:1.5"><path d="M12 2.5l7 18-7-4-7 4z"/></svg>',
     xfer: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h14M13 6l6 6-6 6"/></svg>',
     undo: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/></svg>'
   };
@@ -405,6 +407,7 @@
     map.fitBounds(b, { paddingTopLeft: [24, 64], paddingBottomRight: [70, window.innerWidth >= 900 ? 30 : 30], maxZoom: 17 });
   }
   map.on('dragstart', () => { if (S.follow) setFollow(false); });
+  map.on('zoomend', () => { if (S.nav && S.pos) map.panTo(navTarget(), { animate: false }); });
   function zoomClass() { const z = map.getZoom(), c = map.getContainer(); c.classList.toggle('zlow', z < 15.5); c.classList.toggle('zmid', z >= 15.5 && z < 16.5); }
   map.on('zoomend', zoomClass); zoomClass();
 
@@ -475,13 +478,13 @@
     return out;
   }
   function trkFlag(p, txt) {
-    const icon = L.divIcon({ className: '', html: `<div class="trkflag">${txt}</div>`, iconSize: [0, 0], iconAnchor: [0, 0] });
+    const icon = L.divIcon({ className: '', html: `<div class="upr"><div class="trkflag">${txt}</div></div>`, iconSize: [0, 0], iconAnchor: [0, 0] });
     L.marker([p.lat, p.lon], { icon, interactive: false, keyboard: false, zIndexOffset: 900 }).addTo(trkLayer);
   }
   // точка от другия наряд, към/от която води маршрутът – натискане прехвърля там
   function trkXfer(q, out) {
     const lbl = (out ? '→ ' : '') + q.routeName + ' ' + q.n + (out ? '' : ' →');
-    const icon = L.divIcon({ className: '', html: `<div class="trkxfer${out ? ' out' : ''}"><i></i><span></span></div>`, iconSize: [0, 0], iconAnchor: [0, 0] });
+    const icon = L.divIcon({ className: '', html: `<div class="upr"><div class="trkxfer${out ? ' out' : ''}"><i></i><span></span></div></div>`, iconSize: [0, 0], iconAnchor: [0, 0] });
     const m = L.marker([q.lat, q.lon], { icon, keyboard: false, zIndexOffset: -300, title: 'Към ' + q.routeName });
     m.on('add', () => { const s = m.getElement() && m.getElement().querySelector('span'); if (s) s.textContent = lbl; });
     m.on('click', () => transferTo(q.route));
@@ -530,6 +533,7 @@
   function transferTo(key) {
     if (!byKey[key]) return;
     if (key !== S.route) setRoute(key, true);
+    if (S.nav) return;   // в навигация картата си следва колата и показва следващия отсечек
     if (S.follow) setFollow(false);
     const c = chainOf(cur());
     if (!tnext || !c) { fitTo(cur().pts.filter(p => !V.has(p.id))); return; }
@@ -571,20 +575,105 @@
   ['pointerdown', 'touchend', 'click'].forEach(ev => document.addEventListener(ev, () => { if (!wakeLock && (!awakeVideo || awakeVideo.paused)) keepAwake(); }, { passive: true }));
 
   function setFollow(on) {
+    if (!on && S.nav) setNav(false);
     S.follow = on;
-    if (on && S.pos) map.setView([S.pos.lat, S.pos.lon], Math.max(map.getZoom(), 17), { animate: true });
+    if (on && S.pos && !S.nav) map.setView([S.pos.lat, S.pos.lon], Math.max(map.getZoom(), 17), { animate: true });
     renderLocBtn();
   }
   function renderLocBtn() {
-    const b = $('#locBtn');
-    b.dataset.state = S.follow ? 'follow' : (S.pos ? 'on' : 'off');
-    b.setAttribute('aria-label', S.follow ? 'Спри следването' : 'Следвай моето местоположение');
+    const b = $('#locBtn'), st = S.nav ? 'nav' : (S.follow ? 'follow' : (S.pos ? 'on' : 'off'));
+    if (b.dataset.state !== st) b.innerHTML = st === 'nav' ? ICON.navmode : ICON.loc;
+    b.dataset.state = st;
+    b.setAttribute('aria-label', st === 'nav' ? 'Спри навигацията' : (st === 'follow' ? 'Навигация – картата се върти по посоката' : 'Следвай моето местоположение'));
+    $('#navAttr').hidden = !S.nav;
   }
+
+  // ---------- навигация: картата се върти по посоката на движение, колата е долу в средата ----------
+  // Картата се завърта с CSS (без външна библиотека); точките и етикетите се връщат изправени.
+  // Докато се върти, картата е по-голяма от екрана (диагонала), за да няма празни ъгли.
+  S.nav = false;
+  const mapEl = $('#map');
+  let navBrg = 0, navWrap = 0, navPrev = null, navTouch = null, navPtrs = 0;
+  const RAD = Math.PI / 180;
+  function bearingTo(a, b) {
+    const f1 = a.lat * RAD, f2 = b.lat * RAD, dl = (b.lon - a.lon) * RAD;
+    const y = Math.sin(dl) * Math.cos(f2), x = Math.cos(f1) * Math.sin(f2) - Math.sin(f1) * Math.cos(f2) * Math.cos(dl);
+    return (Math.atan2(y, x) / RAD + 360) % 360;
+  }
+  // посоката: от GPS при движение, иначе от последните ~12 м път; при спиране остава последната
+  function navHeading() {
+    const p = S.pos; if (!p) return null;
+    if (p.heading != null && !isNaN(p.heading) && (p.speed || 0) > 1.4) { navPrev = p; return p.heading; }
+    if (navPrev && distM(navPrev, p) > 12) { const b = bearingTo(navPrev, p); navPrev = p; return b; }
+    if (!navPrev) navPrev = p;
+    return null;
+  }
+  function navSize(on) {
+    const wrap = mapEl.parentElement, W = wrap.clientWidth, H = wrap.clientHeight;
+    if (on) {
+      const D = Math.ceil(Math.hypot(W, H)) + 2;
+      Object.assign(mapEl.style, { inset: 'auto', width: D + 'px', height: D + 'px', left: Math.round((W - D) / 2) + 'px', top: Math.round((H - D) / 2) + 'px' });
+    } else ['inset', 'width', 'height', 'left', 'top'].forEach(k => { mapEl.style[k] = ''; });
+    map.invalidateSize({ pan: false, animate: false });
+  }
+  function setBrg(b, animate) {
+    const d = ((b - navBrg + 540) % 360) - 180;
+    navBrg = (navBrg + d + 360) % 360; navWrap += d;
+    mapEl.classList.toggle('brg-anim', !!animate);
+    mapEl.style.setProperty('--brg', navWrap.toFixed(1) + 'deg');
+    drawMe();
+  }
+  // центърът е пред колата, за да се вижда повече път напред
+  function navTarget() {
+    const z = map.getZoom(), pt = map.project([S.pos.lat, S.pos.lon], z);
+    const d = mapEl.parentElement.clientHeight * 0.22, r = navBrg * RAD;
+    return map.unproject(pt.add(L.point(Math.sin(r) * d, -Math.cos(r) * d)), z);
+  }
+  function navUpdate(first) {
+    if (!S.nav || !S.pos) return;
+    const h = navHeading();
+    if (h != null && (first || Math.abs(((h - navBrg + 540) % 360) - 180) > 6)) setBrg(h, !first);
+    map.panTo(navTarget(), first ? { animate: false } : { animate: true, duration: 0.9, easeLinearity: 1, noMoveStart: true });
+  }
+  function setNav(on) {
+    if (on === S.nav) return;
+    if (on && !S.pos) return;
+    S.nav = on;
+    if (on) {
+      S.follow = true;
+      map.dragging.disable();
+      map.options.touchZoom = 'center'; map.options.doubleClickZoom = 'center';
+      navSize(true);
+      mapEl.classList.add('navrot');
+      const h0 = navHeading();
+      const nxt = tnext ? tnext.p : (nearInfo ? nearInfo.p : null);
+      setBrg(h0 != null ? h0 : (nxt ? bearingTo(S.pos, nxt) : 0), false);
+      if (map.getZoom() < 17) map.setZoom(17, { animate: false });
+      navUpdate(true);
+    } else {
+      const c = map.getCenter(), z = map.getZoom();
+      mapEl.classList.remove('navrot', 'brg-anim');
+      navBrg = 0; navWrap = 0; mapEl.style.removeProperty('--brg'); drawMe();
+      navSize(false);
+      map.setView(c, z, { animate: false });
+      map.dragging.enable();
+      map.options.touchZoom = true; map.options.doubleClickZoom = true;
+    }
+    renderLocBtn();
+  }
+  // в навигация плъзгането спира навигацията (картата се изправя и после се мести нормално)
+  mapEl.addEventListener('pointerdown', e => { navPtrs++; if (S.nav && navPtrs === 1) navTouch = { x: e.clientX, y: e.clientY }; else navTouch = null; }, true);
+  mapEl.addEventListener('pointermove', e => {
+    if (!S.nav || !navTouch || navPtrs > 1) return;
+    if (Math.hypot(e.clientX - navTouch.x, e.clientY - navTouch.y) > 14) { navTouch = null; setFollow(false); toast('Навигацията е спряна – натисни бутона за местоположение, за да я пуснеш пак.'); }
+  }, true);
+  ['pointerup', 'pointercancel'].forEach(ev => mapEl.addEventListener(ev, () => { navPtrs = Math.max(0, navPtrs - 1); if (!navPtrs) navTouch = null; }, true));
   function drawMe() {
     if (!S.pos) return;
     const ll = [S.pos.lat, S.pos.lon];
     const moving = S.pos.heading != null && !isNaN(S.pos.heading) && (S.pos.speed || 0) > 1;
-    const html = `<div class="me">${moving ? `<i class="dir" style="transform:rotate(${Math.round(S.pos.heading)}deg)"></i>` : ''}</div>`;
+    const hd = moving ? S.pos.heading : (S.nav ? navBrg : null);   // в навигация стрелката винаги сочи напред
+    const html = `<div class="me">${hd != null ? `<i class="dir" style="transform:rotate(${Math.round(hd)}deg)"></i>` : ''}</div>`;
     const icon = L.divIcon({ className: '', html, iconSize: [22, 22], iconAnchor: [11, 11] });
     if (!meMarker) { meMarker = L.marker(ll, { icon, interactive: false, zIndexOffset: 2000 }).addTo(map); }
     else { meMarker.setLatLng(ll); meMarker.setIcon(icon); }
@@ -599,7 +688,8 @@
     S.pos = { lat: c.latitude, lon: c.longitude, acc: c.accuracy, heading: c.heading, speed: c.speed };
     S.geoErr = null;
     drawMe();
-    if (S.follow) map.panTo([S.pos.lat, S.pos.lon], { animate: true });
+    if (S.nav) navUpdate(false);
+    else if (S.follow) map.panTo([S.pos.lat, S.pos.lon], { animate: true });
     if (first) renderLocBtn();
     renderCard(); updateMarkers();
     const now = Date.now();
@@ -849,9 +939,9 @@
     if (id) {
       const p = ptById[id];
       if (fromList) {
+        if (S.follow) setFollow(false);
         if (window.innerWidth < 900) setSheet('peek');
         if (p.ll) map.setView([p.lat, p.lon], Math.max(map.getZoom(), 17), { animate: true });
-        if (S.follow) setFollow(false);
       }
     }
   }
@@ -940,8 +1030,10 @@
       toast(S.geoErr === 'denied' ? 'Няма достъп до местоположението. Разрешете го за този сайт от настройките на браузъра.' : 'Търся местоположението…');
       startGeo(); return;
     }
-    setFollow(!S.follow);
-    if (S.follow) toast('Картата следва колата.');
+    // като в Google Maps: 1-во натискане – следва колата, 2-ро – навигация (картата се върти), 3-то – пак само следва
+    if (!S.follow) { setFollow(true); toast('Картата следва колата. Натисни пак за навигация.'); }
+    else if (!S.nav) { setNav(true); toast('Навигация: картата се върти по посоката на движение.'); }
+    else { setNav(false); setFollow(true); toast('Картата следва колата (север е горе).'); }
   });
   $('#trkBtn').addEventListener('click', () => {
     S.trk = !S.trk; LS.set('obhod.trk', S.trk);
@@ -949,9 +1041,9 @@
     toast(S.trk ? 'Маршрутът е показан.' : 'Маршрутът е скрит.');
   });
   $('#fitBtn').addEventListener('click', () => {
+    if (S.follow) setFollow(false);
     const left = cur().pts.filter(p => !V.has(p.id));
     fitTo(left.length ? left : cur().pts, true);
-    if (S.follow) setFollow(false);
   });
 
   // reset – нарядите, които се карат заедно, може да се изчистят наведнъж
@@ -1111,7 +1203,7 @@
   buildMarkers();
   refresh();
   setTimeout(() => { map.invalidateSize(); const left = cur().pts.filter(p => !V.has(p.id)); fitTo(left.length ? left : cur().pts); }, 60);
-  window.addEventListener('resize', () => map.invalidateSize());
+  window.addEventListener('resize', () => { if (S.nav) { navSize(true); navUpdate(true); } else map.invalidateSize(); });
   startGeo();
   keepAwake();
   if (API) { sync(); loadNariad(true); }
