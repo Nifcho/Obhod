@@ -49,7 +49,7 @@
   const cur = () => byKey[S.route];
 
   // Търговските отметки важат за една смяна: от SHIFT_H часа до SHIFT_H часа на следващия ден.
-  const SHIFT_H = CFG.turgShiftHour != null && !isNaN(Number(CFG.turgShiftHour)) ? Number(CFG.turgShiftHour) : 12;
+  const SHIFT_H = CFG.turgShiftHour != null && !isNaN(Number(CFG.turgShiftHour)) ? Number(CFG.turgShiftHour) : 10;
   function shiftStart(t) { const d = new Date(t); d.setHours(SHIFT_H, 0, 0, 0); if (d.getTime() > t) d.setDate(d.getDate() - 1); return d.getTime(); }
   const isTg = id => String(id).startsWith('tg-');
 

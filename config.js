@@ -4,7 +4,7 @@
 window.OBHOD_CONFIG = {
   apiUrl: 'https://script.google.com/macros/s/AKfycbyf7yG_vn-eKIYIiRsHXzA_z-Q67OVUhhJWNdKsB-wmONMBCvkofDsfPcpUn8ERmMjT/exec',
   pollSec: 10,
-  // Търговски: денят на наряда и отметките се сменят сами в този час (12 = 12:00) – след нощната смяна, преди следващата.
-  turgShiftHour: 12,
+  // Търговски: денят на наряда и отметките се сменят сами в този час (10 = 10:00) – след нощната смяна, преди следващата.
+  turgShiftHour: 10,
   drivers: ['Валентин', 'Влади', 'Тошко', 'Румен Евтимов', 'Лъчо', 'Ради']
 };
