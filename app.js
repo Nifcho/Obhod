@@ -1587,9 +1587,15 @@
   const IS_IOS = /iphone|ipad|ipod/i.test(UA) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const IS_MOBILE = IS_IOS || /android|mobile|huawei|harmonyos/i.test(UA);
   const isStandalone = () => (window.matchMedia && (matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches)) || navigator.standalone === true;
+  // Браузърът на Samsung прави приложението по стар начин и Google Play Protect го блокира („Блокирано е небезопасно приложение“) –
+  // там пращаме към Chrome, откъдето се инсталира нормално.
+  const IS_SAMSUNG = !IS_IOS && /SamsungBrowser/i.test(UA);
+  const chromeIntent = path => 'intent://' + location.host + path + '#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=' + encodeURIComponent('https://play.google.com/store/apps/details?id=com.android.chrome') + ';end';
   let installEvt = null, installShown = false, installTimer = 0;
   window.addEventListener('beforeinstallprompt', e => {
-    e.preventDefault(); installEvt = e;
+    e.preventDefault();
+    if (IS_SAMSUNG) { $('#installRow').hidden = false; return; }
+    installEvt = e;
     $('#installRow').hidden = false;
     clearTimeout(installTimer); maybeAskInstall(false);
   });
@@ -1608,10 +1614,11 @@
       for (const l of lines) steps.append(el('li', null, l));
       txt = 'Така „Обход“ ще е на началния екран и ще се отваря на цял екран:';
     }
+    if (IS_SAMSUNG) txt = 'В браузъра на Samsung телефонът спира инсталирането („Блокирано е небезопасно приложение“). Отворете „Обход“ в Chrome – оттам се инсталира с едно натискане.';
     $('#installTxt').textContent = txt;
-    steps.hidden = !!installEvt;
-    $('#installYes').textContent = installEvt ? 'Инсталирай' : 'Разбрах';
-    $('#installNo').hidden = !installEvt && !!manual;
+    steps.hidden = !!installEvt || IS_SAMSUNG;
+    $('#installYes').textContent = IS_SAMSUNG ? 'Отвори в Chrome' : (installEvt ? 'Инсталирай' : 'Разбрах');
+    $('#installNo').hidden = !installEvt && !!manual && !IS_SAMSUNG;
     $('#installModal').hidden = false; installShown = true;
   }
   function maybeAskInstall(fallback) {
@@ -1625,6 +1632,7 @@
   }
   $('#installYes').addEventListener('click', async () => {
     $('#installModal').hidden = true;
+    if (IS_SAMSUNG) { location.href = chromeIntent(location.pathname.replace(/[^/]*$/, '') + 'install/'); return; }
     if (!installEvt) { LS.set('obhod.installNo', Date.now()); return; }
     const e = installEvt; installEvt = null;
     try { await e.prompt(); const r = await e.userChoice; if (r && r.outcome !== 'accepted') LS.set('obhod.installNo', Date.now()); } catch (err) {}
