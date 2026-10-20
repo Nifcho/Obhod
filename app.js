@@ -1263,6 +1263,7 @@
       if (fromList) {
         if (S.follow) setFollow(false);
         if (window.innerWidth < 900) setSheet('peek');
+        else { const c = $('#card'), sh = $('#sheet'); if (c.getBoundingClientRect().top < sh.getBoundingClientRect().top) sh.scrollTo({ top: 0, behavior: 'smooth' }); }
         if (p.ll) map.setView([p.lat, p.lon], Math.max(map.getZoom(), 17), { animate: true });
       }
     }
@@ -1290,7 +1291,7 @@
     buildMarkers(); refresh();
     if (!noFit) fitTo(cur().pts.filter(p => !V.has(p.id)).length ? cur().pts.filter(p => !V.has(p.id)) : cur().pts);
   }
-  function setSheet(state) { $('#sheet').dataset.state = state; $('#grab').setAttribute('aria-label', state === 'full' ? 'Скрий списъка' : 'Покажи списъка'); setTimeout(() => map.invalidateSize(), 260); }
+  function setSheet(state) { $('#sheet').dataset.state = state; if (state !== 'full') $('#sheet').scrollTop = 0; $('#grab').setAttribute('aria-label', state === 'full' ? 'Скрий списъка' : 'Покажи списъка'); setTimeout(() => map.invalidateSize(), 260); }
 
   // navigation: ask once which app to use
   function openUrl(url) {

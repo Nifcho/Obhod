@@ -194,6 +194,10 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
 
 .sheet-body { display: none; flex-direction: column; gap: 10px; overflow-y: auto; min-height: 0; padding-bottom: 6px; }
 .sheet[data-state="full"] .sheet-body { display: flex; }
+/* отворен списък: превърта се целият лист – и картата на точката отгоре изчезва, за да се вижда повече от списъка */
+.sheet[data-state="full"] { overflow-y: auto; overscroll-behavior: contain; }
+.sheet[data-state="full"] .sheet-body { flex: none; overflow: visible; min-height: auto; }
+.sheet[data-state="full"] .grab { position: sticky; top: 0; z-index: 4; background: var(--surface); }
 .tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
 .tools .btn { flex: 1 1 auto; }
 .seg { display: flex; gap: 4px; flex-wrap: wrap; }
@@ -248,7 +252,8 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
   .app { display: grid; grid-template-columns: minmax(0, 1fr) 420px; grid-template-rows: auto minmax(0, 1fr); }
   .bar { grid-column: 1 / -1; }
   .mapwrap { grid-column: 1; grid-row: 2; }
-  .sheet { grid-column: 2; grid-row: 2; max-height: none !important; border-top: 0; border-left: 1px solid var(--line); box-shadow: none; padding-top: 12px; overflow: hidden; }
+  .sheet { grid-column: 2; grid-row: 2; max-height: none !important; border-top: 0; border-left: 1px solid var(--line); box-shadow: none; padding-top: 12px; overflow-y: auto; overscroll-behavior: contain; }
+  .sheet .sheet-body { flex: none; overflow: visible; min-height: auto; }
   .grab { display: none; }
   .summary { margin-top: 0; }
   .sheet .sheet-body { display: flex; }
