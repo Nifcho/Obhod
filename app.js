@@ -983,7 +983,7 @@
     if (!API) st.hidden = true;
     else if (NAR.src === 'snapshot') st.textContent = '↻ запис ' + fmtWhen(NAR.at);
     else if (NAR.src !== 'sheet') st.textContent = narBusy ? '↻ …' : '↻ вграден';
-    else st.textContent = (narErr === true ? '↻ без връзка ' : '↻ ') + fmtWhen(NAR.at);
+    else { st.textContent = '↻ ' + fmtWhen(NAR.at); if (narErr === true) { st.classList.add('off'); st.title = 'Няма връзка с таблицата – нарядът е от ' + fmtWhen(NAR.at) + '. Натисни, за да опиташ пак.'; } }
     lbl.textContent = ''; lbl.append(txt, ed, st);
     lbl.classList.toggle('warn', warn);
   }
@@ -1669,6 +1669,11 @@
   refresh();
   setTimeout(() => { map.invalidateSize(); const left = cur().pts.filter(p => !V.has(p.id)); fitTo(left.length ? left : cur().pts); }, 60);
   window.addEventListener('resize', () => { if (S.nav) { navSize(true); navUpdate(true); } else map.invalidateSize(); });
+  // долният лист е толкова висок, колкото е съдържанието му – картата се преоразмерява с него
+  if (window.ResizeObserver) {
+    let rz = 0;
+    new ResizeObserver(() => { cancelAnimationFrame(rz); rz = requestAnimationFrame(() => { if (S.nav) { navSize(true); navUpdate(true); } else map.invalidateSize({ pan: false }); }); }).observe($('.mapwrap'));
+  }
   startGeo();
   keepAwake();
   if (API) { sync(); loadNariad(true); }
