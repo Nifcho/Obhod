@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Инсталирай „Обход“</title>
+<meta name="description" content="Приложението за шофьорите на Алара: точките по маршрута, навигация и отметки „Минах“.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Инсталирай „Обход на точките“">
+<meta property="og:description" content="Приложението за шофьорите на Алара – отвори линка и натисни „Инсталирай“.">
+<meta property="og:url" content="https://nifcho.github.io/Obhod/install/">
+<meta property="og:image" content="https://nifcho.github.io/Obhod/icons/icon-512.png">
+<meta property="og:image:width" content="512">
+<meta property="og:image:height" content="512">
+<meta name="theme-color" content="#ffffff">
+<link rel="manifest" href="../manifest.webmanifest">
+<link rel="icon" href="../icons/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Обход">
+<script>
+  // отворено от началния екран (вече е инсталирано) – направо в приложението
+  if ((window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true) location.replace('../');
+</script>
+<style>
+@font-face { font-family: "Montserrat"; font-style: normal; font-weight: 100 900; font-display: swap; src: url(../fonts/montserrat-cyrillic-wght-normal.woff2) format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+@font-face { font-family: "Montserrat"; font-style: normal; font-weight: 100 900; font-display: swap; src: url(../fonts/montserrat-latin-wght-normal.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+:root { --red: #E4101C; --ink: #0C0C0C; --muted: #5c5f66; --line: #e4e4e7; --bg: #ffffff; --soft: #f4f4f5; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); }
+body { font: 500 17px/1.45 "Montserrat", system-ui, sans-serif; min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; align-items: center; padding: max(28px, env(safe-area-inset-top)) 18px max(24px, env(safe-area-inset-bottom)); }
+main { width: 100%; max-width: 440px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 14px; flex: 1; }
+.bar { width: 100%; height: 6px; background: var(--red); position: fixed; top: 0; left: 0; }
+.logo { width: 116px; height: 116px; border-radius: 50%; box-shadow: 0 6px 24px rgba(0,0,0,.14); margin-top: 18px; }
+h1 { font-size: 27px; line-height: 1.15; font-weight: 800; margin: 6px 0 0; letter-spacing: -.01em; }
+.sub { color: var(--muted); margin: 0; font-size: 15.5px; }
+.card { width: 100%; text-align: left; background: var(--soft); border-radius: 18px; padding: 18px; margin-top: 8px; }
+.card[hidden], [hidden] { display: none !important; }
+.card h2 { font-size: 18px; margin: 0 0 10px; font-weight: 800; }
+.card p { margin: 0 0 10px; }
+.card p:last-child { margin-bottom: 0; }
+.btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 60px; border-radius: 14px; border: 0; background: var(--red); color: #fff; font: 800 19px "Montserrat", system-ui, sans-serif; text-decoration: none; cursor: pointer; margin-top: 4px; -webkit-tap-highlight-color: transparent; }
+.btn:active { transform: scale(.985); }
+.btn.ghost { background: #fff; color: var(--ink); border: 1.5px solid var(--line); font-weight: 700; font-size: 17px; min-height: 54px; }
+.btn svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+ol.steps { margin: 0; padding: 0; list-style: none; counter-reset: s; display: flex; flex-direction: column; gap: 12px; }
+ol.steps li { counter-increment: s; display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: start; }
+ol.steps li::before { content: counter(s); width: 34px; height: 34px; border-radius: 50%; background: var(--ink); color: #fff; display: grid; place-items: center; font-weight: 800; font-size: 16px; }
+ol.steps b { font-weight: 800; }
+.ico { display: inline-grid; place-items: center; width: 30px; height: 30px; vertical-align: middle; border-radius: 8px; background: #fff; border: 1px solid var(--line); margin: 0 2px; }
+.ico svg { width: 18px; height: 18px; fill: none; stroke: #0a84ff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.ico.dots svg { stroke: var(--ink); stroke-width: 3.2; }
+.wait { color: var(--muted); font-size: 15px; display: flex; align-items: center; gap: 10px; justify-content: center; padding: 14px 0; }
+.spin { width: 20px; height: 20px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--red); animation: sp .8s linear infinite; }
+@keyframes sp { to { transform: rotate(360deg); } }
+.ok { width: 64px; height: 64px; border-radius: 50%; background: #15803d; display: grid; place-items: center; margin: 0 auto 8px; }
+.ok svg { width: 34px; height: 34px; fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.center { text-align: center; }
+.copy { display: flex; gap: 8px; margin-top: 10px; }
+.copy input { flex: 1; min-width: 0; font: 600 14px "Montserrat", system-ui, sans-serif; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff; color: var(--ink); }
+.copy button { flex: none; border: 0; border-radius: 12px; padding: 0 16px; background: var(--ink); color: #fff; font: 700 15px "Montserrat", system-ui, sans-serif; cursor: pointer; }
+.skip { color: var(--muted); font-size: 15px; margin-top: auto; padding-top: 20px; }
+.skip a { color: var(--ink); font-weight: 700; }
+.note { font-size: 14.5px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="bar"></div>
+<main>
+  <img class="logo" src="../icons/icon-512.png" alt="" width="116" height="116">
+  <h1>Обход на точките</h1>
+  <p class="sub">Приложението за шофьорите на Алара – точките по маршрута, навигация и отметки „Минах“.</p>
+
+  <div class="wait" id="sWait"><span class="spin"></span>Подготвям инсталирането…</div>
+
+  <!-- Android / компютър: браузърът може да инсталира с едно натискане -->
+  <section class="card" id="sPrompt" hidden>
+    <button class="btn" type="button" id="bInstall"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Инсталирай</button>
+    <p class="note center" style="margin-top:12px">След това „Обход“ е на началния екран като обикновено приложение.</p>
+  </section>
+
+  <!-- Android без бутона на браузъра: през менюто -->
+  <section class="card" id="sManual" hidden>
+    <h2>Инсталиране от менюто</h2>
+    <ol class="steps">
+      <li><span>Натисни менюто горе вдясно <span class="ico dots"><svg viewBox="0 0 24 24"><path d="M12 5h.01M12 12h.01M12 19h.01"/></svg></span></span></li>
+      <li><span>Избери <b>„Инсталиране на приложението“</b> или <b>„Добавяне към началния екран“</b>.</span></li>
+      <li><span>Потвърди с <b>„Инсталиране“</b>.</span></li>
+    </ol>
+    <p class="note andr" style="margin-top:14px">Ако в менюто няма такъв ред, отвори линка в Chrome:</p>
+    <a class="btn ghost chromeLink andr" href="#"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/><path d="M12 8.5h8.2M8.97 13.75 4.9 6.7M15.03 13.75 10.9 20.9"/></svg>Отвори в Chrome</a>
+  </section>
+
+  <!-- отворено във Viber, Facebook и др. – оттам не може да се инсталира -->
+  <section class="card" id="sInappAndroid" hidden>
+    <h2>Отвори в Chrome</h2>
+    <p>Линкът е отворен в <b id="inappName">приложението за съобщения</b> – оттам не може да се инсталира. Натисни бутона – ще се отвори в Chrome, после натисни „Инсталирай“.</p>
+    <a class="btn chromeLink" href="#"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/><path d="M12 8.5h8.2M8.97 13.75 4.9 6.7M15.03 13.75 10.9 20.9"/></svg>Отвори в Chrome</a>
+    <p class="note" style="margin-top:12px">Не става ли? Копирай линка и го постави в Chrome:</p>
+    <div class="copy"><input class="link" readonly aria-label="Линк"><button type="button" class="bCopy">Копирай</button></div>
+  </section>
+
+  <!-- iPhone, Safari -->
+  <section class="card" id="sIos" hidden>
+    <h2>Добави на началния екран</h2>
+    <ol class="steps">
+      <li><span>Натисни <b>„Сподели“</b> <span class="ico"><svg viewBox="0 0 24 24"><path d="M12 15V3M8 7l4-4 4 4M6 11H5v10h14V11h-1"/></svg></span> в лентата на Safari.</span></li>
+      <li><span>Превърти надолу и избери <b>„Добави към началния екран“</b> <span class="ico"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M12 8.5v7M8.5 12h7"/></svg></span></span></li>
+      <li><span>Натисни <b>„Добави“</b> горе вдясно.</span></li>
+    </ol>
+  </section>
+
+  <!-- iPhone, но не в Safari (Viber и др.) -->
+  <section class="card" id="sInappIos" hidden>
+    <h2>Отвори в Safari</h2>
+    <p>На iPhone приложението се добавя само от <b>Safari</b>. Копирай линка, отвори Safari и го постави в адреса.</p>
+    <div class="copy"><input class="link" readonly aria-label="Линк"><button type="button" class="bCopy">Копирай</button></div>
+    <p class="note" style="margin-top:12px">Или потърси в менюто <span class="ico dots"><svg viewBox="0 0 24 24"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg></span> ред „Отвори в Safari“.</p>
+  </section>
+
+  <!-- току-що инсталирано -->
+  <section class="card center" id="sDone" hidden>
+    <div class="ok"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+    <h2>Готово!</h2>
+    <p>„Обход“ е на началния екран. Отваряй го оттам.</p>
+    <a class="btn" href="../">Отвори приложението</a>
+  </section>
+
+  <!-- вече е инсталирано на този телефон -->
+  <section class="card center" id="sHave" hidden>
+    <h2>Вече е инсталирано</h2>
+    <p>„Обход“ е на този телефон – отвори го от началния екран.</p>
+    <a class="btn" href="../">Отвори приложението</a>
+  </section>
+
+  <p class="skip">Без инсталиране: <a href="../">отвори в браузъра</a></p>
+</main>
+<script>
+(function () {
+  var UA = navigator.userAgent || '';
+  var IOS = /iphone|ipad|ipod/i.test(UA) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  var ANDROID = /android/i.test(UA);
+  var APPS = [['Viber', /viber/i], ['Facebook', /FBAN|FBAV|FB_IAB|FB4A/], ['Messenger', /messenger/i], ['Instagram', /instagram/i], ['WhatsApp', /whatsapp/i], ['Telegram', /telegram/i], ['Google', /GSA\//]];
+  var inapp = null;
+  for (var i = 0; i < APPS.length; i++) if (APPS[i][1].test(UA)) { inapp = APPS[i][0]; break; }
+  if (!inapp && ANDROID && /; wv\)/.test(UA)) inapp = 'приложението за съобщения';
+  var IOS_SAFARI = IOS && /safari/i.test(UA) && !/crios|fxios|edgios|opios/i.test(UA) && !inapp;
+  var here = location.href.split('#')[0].split('?')[0];
+  var $ = function (id) { return document.getElementById(id); };
+  var all = ['sWait', 'sPrompt', 'sManual', 'sInappAndroid', 'sIos', 'sInappIos', 'sDone', 'sHave'];
+  function show(id) { all.forEach(function (x) { $(x).hidden = x !== id; }); }
+
+  document.querySelectorAll('.chromeLink').forEach(function (a) {
+    a.href = 'intent://' + location.host + location.pathname + '#Intent;scheme=https;package=com.android.chrome;end';
+  });
+  document.querySelectorAll('.copy').forEach(function (box) {
+    var inp = box.querySelector('input'), b = box.querySelector('button');
+    inp.value = here;
+    b.addEventListener('click', function () {
+      var done = function () { b.textContent = 'Копирано ✓'; setTimeout(function () { b.textContent = 'Копирай'; }, 2500); };
+      inp.focus(); inp.select(); inp.setSelectionRange(0, 9999);
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(here).then(done, function () { try { document.execCommand('copy'); done(); } catch (e) {} });
+      else { try { document.execCommand('copy'); done(); } catch (e) {} }
+    });
+  });
+
+  // iPhone
+  if (IOS) { show(IOS_SAFARI ? 'sIos' : 'sInappIos'); return; }
+  // Android в приложение за съобщения
+  if (ANDROID && inapp) { $('inappName').textContent = inapp; show('sInappAndroid'); return; }
+
+  // Android (Chrome, Samsung, Edge…) и компютър: чакаме бутона на браузъра
+  if (!ANDROID) document.querySelectorAll('.andr').forEach(function (x) { x.hidden = true; });
+  var evt = null, decided = false;
+  window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); evt = e; decided = true; show('sPrompt'); });
+  window.addEventListener('appinstalled', function () { evt = null; decided = true; show('sDone'); });
+  $('bInstall').addEventListener('click', function () {
+    if (!evt) return;
+    var e = evt;
+    e.prompt();
+    evt = null;
+    e.userChoice.then(function (r) { show(r && r.outcome === 'accepted' ? 'sDone' : 'sManual'); }, function () { show('sManual'); });
+  });
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('../sw.js', { scope: '../' }).catch(function () {});
+  setTimeout(function () {
+    if (decided) return;
+    var check = navigator.getInstalledRelatedApps ? navigator.getInstalledRelatedApps().catch(function () { return []; }) : Promise.resolve([]);
+    check.then(function (apps) {
+      if (decided) return;
+      if (apps && apps.length) { show('sHave'); return; }
+      show('sManual');
+    });
+  }, 3500);
+})();
+</script>
+</body>
+</html>
