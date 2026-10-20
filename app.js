@@ -1140,9 +1140,20 @@
     } else if (S.pin && sortOf(r) === 'num') {
       const t = el('span', 'otxt hint'); t.innerHTML = 'Задръж ' + ICON.grip + ' и плъзни обекта, за да смениш реда на каране.'; bar.append(t);
     } else if (S.pin) bar.append(el('span', 'otxt hint', 'За смяна на реда избери „По номер“.'));
-    else return;
+    else if (S.name && narEditors().has(S.name)) {
+      // Ники/Тошко на телефон, където още не са въвели ПИН (напр. току-що инсталирано) – иначе не биха разбрали защо няма точки
+      bar.append(el('span', 'otxt hint', 'Редът на каране се сменя с плъзгане – първо въведи ПИН кода си.'));
+      const b = el('button', 'obtn'); b.type = 'button'; b.dataset.act = 'ordpin'; b.innerHTML = ICON.lock + '<span>Въведи ПИН</span>';
+      bar.append(b);
+    } else return;
+    if (ord && !same && !S.pin && S.name && narEditors().has(S.name)) {
+      const b = el('button', 'obtn'); b.type = 'button'; b.dataset.act = 'ordpin'; b.innerHTML = ICON.lock + '<span>Въведи ПИН</span>';
+      bar.append(b);
+    }
     ul.append(bar);
   }
+  // кой е променял наряда (скриптът записва там само хора с валиден ПИН)
+  const narEditors = () => new Set(((NAR && NAR.changes) || []).map(c => c.by).filter(Boolean));
   const everyDay = n => { n = normName(n); return (/^(сряда|събота|неделя)$/.test(n) ? 'всяка ' : 'всеки ') + n; };
   function scrollerOf(n) {
     for (let x = n.parentElement; x && x !== document.body; x = x.parentElement) {
@@ -1334,6 +1345,7 @@
     else if (act === 'xfer') transferTo(t.dataset.key);
     else if (act === 'naredit') requirePin(openNarEditor);
     else if (act === 'ordtpl') { if (tplArm > Date.now()) { tplArm = 0; saveTplOrder(); } else { tplArm = Date.now() + 4000; renderList(); setTimeout(() => { if (tplArm && tplArm <= Date.now()) { tplArm = 0; renderList(); } }, 4100); } }
+    else if (act === 'ordpin') requirePin(() => { refresh(); toast('Готово – задръж точките вляво от обекта и го плъзни.'); });
     else if (act === 'ordreset') { if (narEnqueue({ a: 'order', date: dayDate(S.turgDay), names: [] })) toast('Редът за ' + fmtDay(dayDate(S.turgDay)) + ' е върнат по наряда.'); }
     else if (act === 'bins') openBins(t.dataset.id);
     else if (act === 'nariad') { narErr = false; loadNariad(true); renderSummary(); }
