@@ -1661,9 +1661,25 @@
   if (API) { sync(); loadNariad(true); }
   if (!S.name) openWho();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
-    let reloaded = false;
-    navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloaded && navigator.serviceWorker.controller) { reloaded = true; } });
+    // Нова версия: проверява при всяко връщане в приложението и на 10 мин.; презарежда само, когато никой не пипа нищо.
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      const check = () => { if (navigator.onLine !== false) reg.update().catch(() => {}); };
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+      setInterval(check, 10 * 60e3);
+    }).catch(() => {});
+    let hadCtrl = !!navigator.serviceWorker.controller, wantReload = false, lastTouch = 0;
+    ['pointerdown', 'keydown', 'input'].forEach(ev => document.addEventListener(ev, () => { lastTouch = Date.now(); }, { passive: true, capture: true }));
+    const safeReload = () => {
+      if (!wantReload) return;
+      const busy = drag || S.nav || Array.from(document.querySelectorAll('.modal')).some(m => !m.hidden) ||
+        (document.visibilityState === 'visible' && Date.now() - lastTouch < 8000);
+      if (busy) { setTimeout(safeReload, 4000); return; }
+      wantReload = false; location.reload();
+    };
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadCtrl) { hadCtrl = true; return; }   // първо инсталиране – няма какво да се обновява
+      wantReload = true; safeReload();
+    });
   }
   setInterval(() => {
     renderSync();
