@@ -18,6 +18,9 @@
     warn: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9.5 17h-19z"/><path d="M12 10v4.5M12 17.5v.5"/></svg>',
     loc: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/></svg>',
     navmode: '<svg viewBox="0 0 24 24" aria-hidden="true" style="fill:currentColor;stroke-width:1.5"><path d="M12 2.5l7 18-7-4-7 4z"/></svg>',
+    edit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/></svg>',
+    plus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+    cross: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
     xfer: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h14M13 6l6 6-6 6"/></svg>',
     undo: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/></svg>'
   };
@@ -42,6 +45,7 @@
     server: new Map(Object.entries(LS.get('obhod.server', {}))),
     queue: LS.get('obhod.queue', []),
     reports: LS.get('obhod.reports', []), reportsOld: false,
+    narq: LS.get('obhod.narq', []), narOld: false,
     broken: new Map(Object.entries(LS.get('obhod.broken', {}))),
     drivers: LS.get('obhod.drivers', CFG.drivers || []),
     navApp: LS.get('obhod.nav', ''), routeSeq: [], pendingNav: null,
@@ -95,10 +99,21 @@
     syncing = true;
     let res = null;
     try {
-      if (S.queue.length || S.reports.length) {
-        const ops = S.queue.slice(0, 40), reports = S.reports.slice(0, 10);
-        res = await fetchJSON(API, { method: 'POST', body: JSON.stringify(reports.length ? { ops, reports } : { ops }) });
+      if (S.queue.length || S.reports.length || S.narq.length) {
+        const ops = S.queue.slice(0, 40), reports = S.reports.slice(0, 10), nar = S.narq.slice(0, 40);
+        const body = { ops };
+        if (reports.length) body.reports = reports;
+        if (nar.length) { body.nar = nar; body.nariad = 1; }
+        res = await fetchJSON(API, { method: 'POST', body: JSON.stringify(body) });
         if (res && res.ok) {
+          if (nar.length) {
+            // старият скрипт не познава промените в наряда – пазим ги, докато таблицата ги потвърди
+            if (Array.isArray(res.narApplied)) {
+              const got = new Set(res.narApplied);
+              S.narq = S.narq.filter(o => !got.has(o.id)); LS.set('obhod.narq', S.narq); S.narOld = false;
+            } else S.narOld = true;
+          }
+          if (res.nariad && res.nariad.tabs) { LS.set('obhod.nariad', res.nariad); narErr = false; setNariad(res.nariad); }
           const done = new Set(res.applied && res.applied.length ? res.applied : ops.map(o => o.id));
           S.queue = S.queue.filter(o => !done.has(o.id));
           LS.set('obhod.queue', S.queue);
@@ -126,13 +141,13 @@
     } catch (e) { S.syncErr = true; }
     syncing = false;
     refresh();
-    scheduleSync(S.queue.length ? (S.syncErr ? 8000 : 1500) : (S.reports.length && !S.reportsOld && !S.syncErr ? 3000 : (Number(CFG.pollSec) || 10) * 1000));
+    scheduleSync(S.queue.length ? (S.syncErr ? 8000 : 1500) : ((S.reports.length && !S.reportsOld) || (S.narq.length && !S.narOld)) && !S.syncErr ? 3000 : (Number(CFG.pollSec) || 10) * 1000);
   }
   function scheduleSync(ms) {
     if (!API) return;
     clearTimeout(syncTimer);
     syncTimer = setTimeout(() => {
-      if (document.visibilityState === 'visible' || S.queue.length || S.reports.length) sync(); else scheduleSync(20000);
+      if (document.visibilityState === 'visible' || S.queue.length || S.reports.length || S.narq.length) sync(); else scheduleSync(20000);
     }, ms);
   }
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') scheduleSync(100); });
@@ -164,6 +179,12 @@
     return d;
   }
   function contTxt(p) {
+    if (p.kind === 'turg') {
+      const a = [];
+      if (p.b) a.push(p.b + ' ' + plural(p.b, 'синя', 'сини'));
+      if (p.y) a.push(p.y + ' ' + plural(p.y, 'жълта', 'жълти'));
+      return a.length ? a.join(' + ') : 'без кофи';
+    }
     if (p.y == null && p.g == null) return 'бройката не се вижда';
     const a = [];
     if (p.y) a.push(p.y + ' ' + plural(p.y, 'жълт', 'жълти'));
@@ -172,7 +193,14 @@
   }
   function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
   function dotsEl(p) {
-    if (p.y == null && p.g == null && p.kind) return null;   // търговски и маршрутите без бройки
+    if (p.kind === 'turg') {
+      if (!p.b && !p.y) return null;
+      const s = el('span', 'dots'); s.title = contTxt(p); s.setAttribute('aria-label', contTxt(p));
+      for (let i = 0; i < Math.min(p.b || 0, 8); i++) s.append(el('i', 'dot b'));
+      for (let i = 0; i < Math.min(p.y || 0, 8); i++) s.append(el('i', 'dot y'));
+      return s;
+    }
+    if (p.y == null && p.g == null && p.kind) return null;   // маршрутите без бройки
     const s = el('span', 'dots'); s.title = contTxt(p); s.setAttribute('aria-label', contTxt(p));
     if (p.y == null && p.g == null) { s.textContent = '?'; return s; }
     for (let i = 0; i < (p.y || 0); i++) s.append(el('i', 'dot y'));
@@ -220,7 +248,8 @@
     values[hi].forEach((h, i) => {
       h = String(h || '').toLowerCase().trim();
       const k = /друг/.test(h) ? 'alias' : /обект/.test(h) ? 'name' : /координат/.test(h) ? 'll' : /ширина/.test(h) ? 'lat' : /дължина/.test(h) ? 'lon'
-        : /адрес/.test(h) ? 'addr' : /телефон/.test(h) ? 'ph' : /етикет/.test(h) ? 'tag' : /бележк/.test(h) ? 'note' : '';
+        : /адрес/.test(h) ? 'addr' : /телефон/.test(h) ? 'ph' : /етикет/.test(h) ? 'tag' : /бележк/.test(h) ? 'note'
+        : /^син/.test(h) ? 'b' : /^жълт/.test(h) ? 'y' : /заявк/.test(h) ? 'req' : (h === '№' || h === 'ред' || /номер/.test(h)) ? 'num' : '';
       if (k && c[k] == null) c[k] = i;
     });
     if (c.name == null) return [];
@@ -231,7 +260,9 @@
       const name = g('name'); if (!name) continue;
       let ll = parseLL(g('ll'));
       if (!ll && c.lat != null && c.lon != null) ll = parseLL(g('lat') + '; ' + g('lon'));
-      out.push({ name, ll, addr: g('addr'), ph: g('ph'), tag: g('tag'), note: g('note'), alias: g('alias') });
+      const cnt = k => { const v = g(k); if (v === '') return null; const n = parseInt(v, 10); return isNaN(n) ? null : Math.max(0, n); };
+      out.push({ name, ll, addr: g('addr'), ph: g('ph'), tag: g('tag'), note: g('note'), alias: g('alias'),
+        num: c.num == null ? null : g('num'), b: cnt('b'), y: cnt('y'), req: /^(да|x|х|✓|✔|true|1|по заявка)$/i.test(g('req')) });
     }
     return out;
   }
@@ -241,7 +272,10 @@
       const c = cat.get(normName(it.name)) || null;
       let id = slugId(c ? c.name : it.name);
       if (seen[id]) { seen[id]++; id += '-' + seen[id]; } else seen[id] = 1;
-      const p = { id, n: String(i + 1), st: it.name, y: null, g: null, grp: 'Търговски' };
+      const bins = binsOf(c ? c.name : it.name, c);
+      const p = { id, n: String(i + 1), st: it.name, b: bins.b, y: bins.y, g: null, grp: 'Търговски', okey: canonKey(it.name) };
+      if (c ? c.req : it.req) p.req = true;
+      if (it.added) p.added = it.added;
       const ll = it.ll || (c && c.ll);
       if (ll) { p.lat = ll.lat; p.lon = ll.lon; }
       const addr = it.addr || (c && c.addr); if (addr) p.addr = addr;
@@ -252,22 +286,121 @@
     });
     return pts;
   }
+  // „Промени в наряда“: Дата | Обект | Промяна (Добавен/Махнат) | Шофьор | Час | Ширина | Дължина | Код
+  function parseChanges(values) {
+    values = values || []; const out = [];
+    const head = (values[0] || []).map(h => String(h || '').toLowerCase());
+    const ix = re => head.findIndex(h => re.test(h));
+    const c = { date: ix(/дата/), name: ix(/обект/), op: ix(/промян/), by: ix(/шофьор|кой/), at: ix(/час|кога/), lat: ix(/ширина/), lon: ix(/дължина/), id: ix(/код/) };
+    if (c.date < 0 || c.name < 0 || c.op < 0) return out;
+    for (let i = 1; i < values.length; i++) {
+      const r = values[i] || [], g = k => (c[k] < 0 || r[c[k]] == null ? '' : String(r[c[k]]).trim());
+      const date = normDate(g('date')), name = g('name'); if (!date || !name) continue;
+      const op = /махн|del|-/i.test(g('op')) ? 'del' : 'add';
+      out.push({ date, name, op, by: g('by'), at: parseWhen(g('at')) + i / 1000, ll: parseLL(g('lat') + '; ' + g('lon')), id: g('id') });
+    }
+    return out;
+  }
+  // „2026-10-20“, „20.10.2026“ или „10/20/2026“ → „2026-10-20“
+  function normDate(s) {
+    let m = String(s || '').match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (m) return m[1] + '-' + m[2].padStart(2, '0') + '-' + m[3].padStart(2, '0');
+    m = String(s || '').match(/(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})/);
+    if (m) return /\//.test(s) ? m[3] + '-' + m[1].padStart(2, '0') + '-' + m[2].padStart(2, '0') : m[3] + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0');
+    return '';
+  }
+  function parseWhen(s) {
+    const m = String(s || '').match(/(\d{1,2})\.(\d{1,2})\.(\d{4})\D+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if (m) return new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5], +(m[6] || 0)).getTime();
+    const t = Date.parse(s); return isNaN(t) ? 0 : t;
+  }
   function parseNariad(raw) {
-    let catRows = []; const tabs = [];
+    let catRows = [], changes = []; const tabs = [];
     for (const t of (raw && raw.tabs) || []) {
       const nm = String(t.name || '').trim();
       if (normName(nm) === 'търговски обекти') catRows = parseTable(t.values);
+      else if (normName(nm) === 'промени в наряда') changes = parseChanges(t.values);
       else if (/^наряд/i.test(nm)) tabs.push({ name: nm.replace(/^наряд[\s:–\-]*/i, '').trim() || nm, items: parseTable(t.values) });
     }
-    const cat = new Map();
-    for (const r of catRows) { const k = normName(r.name); if (k && !cat.has(k)) cat.set(k, r); }
+    const cat = new Map(), catList = [];
+    for (const r of catRows) { const k = normName(r.name); if (k && !cat.has(k)) { cat.set(k, r); catList.push(r); } }
     for (const r of catRows) for (const a of (r.alias || '').split(/[;\n]+/)) { const k = normName(a); if (k && !cat.has(k)) cat.set(k, r); }
-    return { src: 'sheet', at: Number(raw.at) || Date.now(), days: withWeek(tabs.map(t => ({ name: t.name, pts: buildDay(t.items, cat) }))) };
+    const N = { src: 'sheet', at: Number(raw.at) || Date.now(), cat, catList, changes, days: withWeek(tabs.map(t => ({ name: t.name, items: t.items }))) };
+    NAR_CAT = cat;
+    for (const d of N.days) d.pts = buildDay((d.items || []).filter(it => !isCand(it)), cat);   // шаблонът – за броя по дни
+    return N;
+  }
+
+  // ---------- наряд за конкретния ден: шаблон ± промените (добавени по заявка, махнати) ----------
+  let NAR_CAT = new Map();
+  const isCand = it => it.num === '';   // ред без № в листа на деня = по заявка за този ден (не е включен сам)
+  const canonKey = name => { const c = NAR_CAT.get(normName(name)); return normName(c ? c.name : name); };
+  const ymd = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  const fmtDay = s => { const m = String(s || '').match(/^\d{4}-(\d{2})-(\d{2})$/); return m ? m[2] + '.' + m[1] : ''; };
+  // датата, за която се отнася денят: днешната смяна или следващият такъв ден от седмицата
+  function dayDate(name) {
+    const s0 = new Date(shiftStart(Date.now())), wd = WEEK.indexOf(normName(name));
+    if (wd < 0) return ymd(s0);
+    const d = new Date(s0); d.setDate(d.getDate() + ((wd - s0.getDay() + 7) % 7));
+    return ymd(d);
+  }
+  // кофите: последната промяна от този телефон (докато таблицата я потвърди) или от „Търговски обекти“; иначе 1 синя + 1 жълта
+  function binsOf(name, c) {
+    const k = canonKey(name);
+    for (let i = S.narq.length - 1; i >= 0; i--) { const o = S.narq[i]; if (o.a === 'bins' && canonKey(o.name) === k) return { b: o.b, y: o.y }; }
+    if (c && (c.b != null || c.y != null)) return { b: c.b || 0, y: c.y || 0 };
+    return { b: 1, y: 1 };
+  }
+  function dayChanges(date) {
+    const m = new Map();
+    const pend = S.narq.filter(o => (o.a === 'add' || o.a === 'del') && o.date === date)
+      .map(o => ({ date: o.date, name: o.name, op: o.a, by: o.by, at: o.at, ll: o.lat != null ? { lat: o.lat, lon: o.lon } : null, pending: true }));
+    for (const c of ((NAR && NAR.changes) || []).concat(pend)) {
+      if (c.date !== date) continue;
+      const k = canonKey(c.name), prev = m.get(k);
+      if (!prev || prev.at <= c.at) m.set(k, c);
+    }
+    return m;
+  }
+  function dayInfo(day) {
+    const date = dayDate(day.name), ch = dayChanges(date);
+    const items = [], removed = [], keys = new Set();
+    for (const it of day.items || []) {
+      if (isCand(it)) continue;
+      const k = canonKey(it.name), c = ch.get(k);
+      if (keys.has(k)) continue;
+      if (c && c.op === 'del') { removed.push({ name: it.name, ch: c }); continue; }
+      items.push(it); keys.add(k);
+    }
+    const added = [];
+    for (const [k, c] of ch) if (c.op === 'add' && !keys.has(k)) { added.push({ name: c.name, ll: c.ll || null, added: { by: c.by, at: c.at } }); keys.add(k); }
+    const cands = [];
+    for (const it of day.items || []) if (isCand(it) && !keys.has(canonKey(it.name)) && !cands.some(x => canonKey(x.name) === canonKey(it.name))) cands.push(it);
+    return { date, items, added, removed, cands, keys };
+  }
+  const llOfItem = it => it.ll || ((NAR_CAT.get(normName(it.name)) || {}).ll) || null;
+  // добавените се вмъкват там, където най-малко удължават обхода
+  function buildEffective(day) {
+    const I = dayInfo(day), list = I.items.slice();
+    for (const a of I.added) {
+      const ll = llOfItem(a); let pos = list.length;
+      if (ll) {
+        let best = Infinity;
+        for (let i = 0; i <= list.length; i++) {
+          const p = i > 0 ? llOfItem(list[i - 1]) : null, n = i < list.length ? llOfItem(list[i]) : null;
+          if (!p && !n) continue;
+          const cost = (p ? distM(p, ll) : 0) + (n ? distM(ll, n) : 0) - (p && n ? distM(p, n) : 0) + (p && n ? 0 : 400);
+          if (cost < best) { best = cost; pos = i; }
+        }
+      }
+      list.splice(pos, 0, a);
+    }
+    return { I, pts: buildDay(list, NAR_CAT) };
   }
   // Винаги се показват всички дни от седмицата; листовете от таблицата ги попълват.
   const WEEK_ORDER = ['понеделник', 'вторник', 'сряда', 'четвъртък', 'петък', 'събота', 'неделя'];
   function withWeek(days) {
-    const out = WEEK_ORDER.map(wd => days.find(x => normName(x.name) === wd) || { name: wd[0].toUpperCase() + wd.slice(1), pts: [] });
+    const out = WEEK_ORDER.map(wd => days.find(x => normName(x.name) === wd) || { name: wd[0].toUpperCase() + wd.slice(1), items: [], pts: [] });
     for (const d of days) if (out.indexOf(d) < 0) out.push(d);
     return out;
   }
@@ -276,7 +409,7 @@
   const SNAP = window.NARIAD_SNAPSHOT && window.NARIAD_SNAPSHOT.tabs ? window.NARIAD_SNAPSHOT : null;
   function builtinNariad() {
     if (SNAP) { const n = parseNariad(SNAP); n.src = 'snapshot'; n.at = Number(SNAP.at) || 0; return n; }
-    return { src: 'builtin', at: 0, days: withWeek(TURG_BUILTIN.length ? [{ name: 'Сряда', pts: TURG_BUILTIN }] : []) };
+    return { src: 'builtin', at: 0, cat: new Map(), catList: [], changes: [], days: withWeek(TURG_BUILTIN.length ? [{ name: 'Сряда', items: TURG_BUILTIN.map(p => ({ name: p.st, ll: p.lat != null ? { lat: p.lat, lon: p.lon } : null, num: null })), pts: TURG_BUILTIN }] : []) };
   }
   const dayOf = name => NAR && NAR.days.find(d => d.name === name);
   function todayDay() {
@@ -294,7 +427,7 @@
   function applyTurg() {
     if (!TURG || !NAR) return;
     S.turgDay = chosenDay();
-    const day = dayOf(S.turgDay), pts = day ? day.pts : [];
+    const day = dayOf(S.turgDay), pts = day ? buildEffective(day).pts : [];
     for (const p of TURG.pts) if (ptById[p.id] === p) delete ptById[p.id];
     for (const p of pts) {
       p.route = 'turg'; p.routeName = 'Търговски' + (S.turgDay ? ' – ' + S.turgDay : ''); p.kind = 'turg';
@@ -736,6 +869,8 @@
     if (!API) { mode = 'local'; txt = 'Таблицата не е свързана – отметките са само на този телефон'; }
     else if (S.queue.length && S.syncErr) { mode = 'offline'; txt = `Няма връзка – ${S.queue.length} ${plural(S.queue.length, 'отметка чака', 'отметки чакат')}`; }
     else if (S.queue.length) { mode = 'pending'; txt = 'Записвам…'; }
+    else if (S.narq.length && S.narOld) { mode = 'pending'; txt = 'Промените в наряда чакат – скриптът в таблицата трябва да се обнови'; }
+    else if (S.narq.length) { mode = 'pending'; txt = S.syncErr ? 'Няма връзка – промените в наряда чакат' : 'Записвам наряда…'; }
     else if (S.reports.length) { mode = 'pending'; txt = S.reportsOld ? 'Сигналът за счупена кофа чака – таблицата още не го приема' : (S.syncErr ? 'Няма връзка – сигналът за счупена кофа чака' : 'Изпращам сигнала…'); }
     else if (S.syncErr) { mode = 'offline'; txt = 'Няма връзка с таблицата'; }
     else if (S.lastSync) { mode = 'live'; txt = 'Общи отметки · на живо'; }
@@ -746,10 +881,12 @@
     const r = cur(), tot = r.pts.length, done = r.pts.filter(p => V.has(p.id)).length;
     $('#doneN').textContent = done; $('#totN').textContent = tot;
     $('#barFill').style.width = (tot ? done / tot * 100 : 0) + '%';
-    const yt = r.pts.reduce((s, p) => s + (p.y || 0), 0), yl = r.pts.filter(p => !V.has(p.id)).reduce((s, p) => s + (p.y || 0), 0);
+    const col = r.kind === 'turg' ? dayColor(S.turgDay) : 'y';
+    const yt = r.pts.reduce((s, p) => s + (p[col] || 0), 0), yl = r.pts.filter(p => !V.has(p.id)).reduce((s, p) => s + (p[col] || 0), 0);
     $('#yelTot').textContent = yt; $('#yelLeft').textContent = yl;
-    const hasY = r.pts.some(p => p.y != null);
-    $('.yel').hidden = !hasY;
+    $('#binLbl').textContent = col === 'b' ? 'Сини:' : 'Жълти:';
+    $('#binDot').className = 'dot ' + (col === 'b' ? 'b' : 'y');
+    $('#binSum').hidden = !col || !r.pts.some(p => p[col] != null);
     renderDays(r);
     $('#resetBtn').disabled = !resetGroup().some(x => x.pts.some(p => V.has(p.id)));
     // route through next remaining points: nearest-first from my position, else by number
@@ -771,6 +908,8 @@
     else { a.removeAttribute('href'); a.setAttribute('aria-disabled', 'true'); $('#routeTxt').textContent = 'Всички са минати'; }
     $('#navName').textContent = navApp() ? NAV_APPS[navApp()].name : 'не е избрано';
   }
+  // от листа „Обекти“: Понеделник синьо, Вторник жълто, Сряда синьо, Четвъртък жълто, Петък синьо
+  const dayColor = name => ({ 'понеделник': 'b', 'сряда': 'b', 'петък': 'b', 'вторник': 'y', 'четвъртък': 'y' })[normName(name)] || '';
   function renderDays(r) {
     const box = $('#days'), lbl = $('#dayLbl');
     const on = r.kind === 'turg' && !!NAR;
@@ -788,14 +927,17 @@
     }
     const name = S.turgDay || '';
     const warn = !!(today && name && name !== today);
-    const txt = el('span', 'daytxt', warn ? 'Не е днешният ден' : (name ? 'Наряд ' + name.toLowerCase() : 'Няма наряд'));
+    const dd = name ? fmtDay(dayDate(name)) : '';
+    const txt = el('span', 'daytxt', (warn ? 'Не е днес' : (name ? 'Наряд ' + name.toLowerCase() : 'Няма наряд')) + (dd ? ' · ' + dd : ''));
+    const ed = el('button', 'dayedit'); ed.type = 'button'; ed.dataset.act = 'naredit'; ed.innerHTML = ICON.edit + '<span>Промени</span>';
+    ed.title = 'Добави или махни обекти за ' + (dd || 'деня');
     const st = el('button', 'stamp'); st.type = 'button'; st.dataset.act = 'nariad';
     st.title = 'Обнови наряда от таблицата';
     if (!API) st.hidden = true;
     else if (NAR.src === 'snapshot') st.textContent = '↻ запис ' + fmtWhen(NAR.at);
     else if (NAR.src !== 'sheet') st.textContent = narBusy ? '↻ …' : '↻ вграден';
     else st.textContent = (narErr === true ? '↻ без връзка ' : '↻ ') + fmtWhen(NAR.at);
-    lbl.textContent = ''; lbl.append(txt, st);
+    lbl.textContent = ''; lbl.append(txt, ed, st);
     lbl.classList.toggle('warn', warn);
   }
   function subEl(p, withGroup, noDist) {
@@ -803,6 +945,8 @@
     const dt = dotsEl(p); if (dt) sub.append(dt);
     if (withGroup) sub.append(el('span', null, p.grp));
     if (p.tag) sub.append(el('span', 'tag', p.tag));
+    if (p.added) sub.append(el('span', 'tag add', 'добавен' + (p.added.by ? ' · ' + (p.added.by === S.name ? 'ти' : p.added.by) : '')));
+    else if (p.req) sub.append(el('span', 'tag', 'по заявка'));
     if (brokenOf(p.id)) { const b = el('span', 'brkmark'); b.innerHTML = ICON.warn + '<span>счупена</span>'; sub.append(b); }
     if (p.ph && p.ph.length) { const t = el('span', 'telmark'); t.innerHTML = ICON.tel; t.title = 'Има телефон'; sub.append(t); }
     if (!p.ll) sub.append(el('span', 'noll', 'без точка на картата'));
@@ -826,6 +970,7 @@
       const msg = r.kind !== 'turg' ? 'Всички точки в маршрута са минати. Натиснете „Нов курс“ преди следващия обход.'
         : (r.pts.length ? 'Всички обекти от наряда са минати.' : 'Няма обекти в наряда' + (S.turgDay ? ' за ' + S.turgDay.toLowerCase() : '') + '.');
       card.append(el('div', 'empty-card', msg));
+      if (r.kind === 'turg' && NAR) { const b = el('button', 'btn'); b.type = 'button'; b.dataset.act = 'naredit'; b.innerHTML = ICON.edit + '<span>Добави обекти за деня</span>'; card.append(b); }
       return;
     }
     if (S.pos && p.ll) d = distM(S.pos, p);
@@ -867,7 +1012,14 @@
     acts.append(tg, nv); card.append(acts);
     if (other) return;
     const rb = el('button', 'btn brkbtn'); rb.type = 'button'; rb.dataset.act = 'broken'; rb.dataset.id = p.id;
-    rb.innerHTML = ICON.warn + '<span>Счупена кофа</span>'; card.append(rb);
+    rb.innerHTML = ICON.warn + '<span>Счупена кофа</span>';
+    if (p.kind === 'turg') {
+      const bb = el('button', 'btn binsbtn'); bb.type = 'button'; bb.dataset.act = 'bins'; bb.dataset.id = p.id;
+      bb.append(el('span', null, 'Кофи'));
+      const dt = dotsEl(p); if (dt) bb.append(dt); else bb.append(el('span', 'muted', 'няма'));
+      rb.lastChild.textContent = 'Счупена';
+      const two = el('div', 'acts two'); two.append(bb, rb); card.append(two);
+    } else card.append(rb);
   }
   function rowEl(p, withGroup) {
     const li = el('li', 'row ' + p.shape + (V.has(p.id) ? ' done' : '') + (S.sel === p.id ? ' sel' : '')); li.dataset.id = p.id;
@@ -1021,6 +1173,8 @@
     else if (act === 'install') openInstall(true);
     else if (act === 'broken') openBroken(t.dataset.id);
     else if (act === 'xfer') transferTo(t.dataset.key);
+    else if (act === 'naredit') openNarEditor();
+    else if (act === 'bins') openBins(t.dataset.id);
     else if (act === 'nariad') { narErr = false; loadNariad(true); renderSummary(); }
   });
   $('#routeSel').addEventListener('change', e => { setRoute(e.target.value); e.target.blur(); });
@@ -1124,6 +1278,98 @@
     if (navigator.vibrate) navigator.vibrate(35);
     toast('Сигналът е изпратен – Ники ще получи известие.');
     refresh(); scheduleSync(50);
+  });
+
+  // ---------- наряд за деня: добавяне (по заявка, нов обект) и махане ----------
+  function narEnqueue(op) {
+    if (!S.name) { openWho(); toast('Първо изберете кой сте.'); return false; }
+    op.id = uid(); op.at = Date.now(); op.by = S.name;
+    S.narq.push(op); LS.set('obhod.narq', S.narq);
+    if (API) scheduleSync(50);
+    applyTurg(); refresh();
+    return true;
+  }
+  let narEditDay = null;
+  function openNarEditor() {
+    if (!NAR || !S.turgDay) return;
+    narEditDay = S.turgDay;
+    $('#narSearch').value = '';
+    renderNarEditor();
+    $('#narModal').hidden = false;
+  }
+  const matches = (c, q) => normName(c.name).includes(q) || normName(c.alias || '').includes(q);
+  function narRow(name, sub, btnTxt, cls, onClick, extra) {
+    const li = el('div', 'nrow' + (cls ? ' ' + cls : ''));
+    const t = el('div', 'ntxt'); t.append(el('div', 'nname', name)); if (sub) t.append(el('div', 'nsub', sub));
+    li.append(t);
+    if (extra) li.append(extra);
+    const b = el('button', 'nbtn ' + (cls || '')); b.type = 'button'; b.innerHTML = btnTxt; b.addEventListener('click', onClick);
+    li.append(b);
+    return li;
+  }
+  function renderNarEditor() {
+    const day = dayOf(narEditDay); if (!day) return;
+    const I = dayInfo(day), body = $('#narBody'); body.textContent = '';
+    const isToday = I.date === ymd(new Date(shiftStart(Date.now())));
+    const count = I.items.length + I.added.length;
+    $('#narTitle').textContent = 'Наряд ' + day.name.toLowerCase() + ', ' + fmtDay(I.date);
+    $('#narSub').textContent = (isToday ? 'Днес · ' : '') + count + ' ' + plural(count, 'обект', 'обекта') + '. Промените са само за тази дата и ги виждат всички шофьори.';
+    const sec = (title, rows) => { if (!rows.length) return; body.append(el('div', 'grp', title)); rows.forEach(r => body.append(r)); };
+    const add = (name, extra) => () => { if (narEnqueue(Object.assign({ a: 'add', date: I.date, name }, extra || {}))) { $('#narSearch').value = ''; renderNarEditor(); } };
+    const del = name => () => { if (narEnqueue({ a: 'del', date: I.date, name })) renderNarEditor(); };
+    const catSub = c => [c && c.req ? 'по заявка' : '', c && !c.ll ? 'без точка на картата' : ''].filter(Boolean).join(' · ');
+    const PLUS = ICON.plus + '<span>Добави</span>', CROSS = ICON.cross + '<span>Махни</span>';
+    const q = normName($('#narSearch').value);
+    // в реда на обхода (добавените – там, където са вмъкнати)
+    const inList = buildEffective(day).pts.map(p => ({ name: p.st, added: p.added || null, n: p.n }));
+    if (q) {
+      const found = NAR.catList.filter(c => !I.keys.has(canonKey(c.name)) && matches(c, q)).slice(0, 40);
+      sec('Добави за ' + fmtDay(I.date), found.map(c => narRow(c.name, catSub(c), PLUS, 'add', add(c.name))));
+      sec('В наряда', inList.filter(x => normName(x.name).includes(q)).map(x => narRow(x.name, x.added ? 'добавен' : '', CROSS, 'del', del(x.name))));
+      const raw = $('#narSearch').value.trim();
+      if (raw.length >= 3 && !NAR_CAT.has(normName(raw))) {
+        const box = el('label', 'nhere');
+        const cb = el('input'); cb.type = 'checkbox'; cb.checked = !!S.pos; cb.disabled = !S.pos;
+        box.append(cb, el('span', null, S.pos ? 'точката е тук, където съм' : 'без точка на картата (няма местоположение)'));
+        const row = narRow('Нов обект: „' + raw + '“', 'добавя се за ' + fmtDay(I.date) + ' и в списъка с обекти (по заявка)', PLUS, 'add', () => {
+          add(raw, Object.assign({ isNew: true }, cb.checked && S.pos ? { lat: +S.pos.lat.toFixed(6), lon: +S.pos.lon.toFixed(6) } : {}))();
+        }, box);
+        body.append(el('div', 'grp', 'Нов обект'), row);
+      }
+      if (!body.childNodes.length) body.append(el('p', 'muted', 'Няма такъв обект.'));
+      return;
+    }
+    sec('По заявка за ' + day.name.toLowerCase(), I.cands.map(it => narRow(it.name, 'не е включен сам – добави го, ако има заявка', PLUS, 'add', add(it.name))));
+    sec('В наряда · ' + count, inList.map(x => narRow(x.n + '. ' + x.name, x.added ? 'добавен' + (x.added.by ? ' от ' + x.added.by : '') : '', CROSS, 'del', del(x.name))));
+    sec('Махнати · ' + I.removed.length, I.removed.map(x => narRow(x.name, 'махнат' + (x.ch && x.ch.by ? ' от ' + x.ch.by : ''), ICON.undo + '<span>Върни</span>', 'add', add(x.name))));
+    body.append(el('p', 'muted', 'За друг обект или нов по заявка – напиши името горе.'));
+  }
+  $('#narSearch').addEventListener('input', renderNarEditor);
+  $('#narClose').addEventListener('click', () => { $('#narModal').hidden = true; });
+  $('#narModal').addEventListener('click', e => { if (e.target.id === 'narModal') $('#narModal').hidden = true; });
+
+  // ---------- кофи на търговски обект (по подразбиране 1 синя + 1 жълта) ----------
+  let binsFor = null, binsVal = { b: 1, y: 1 };
+  function openBins(id) {
+    const p = ptById[id]; if (!p) return;
+    if (!S.name) { openWho(); toast('Първо изберете кой сте.'); return; }
+    binsFor = p; binsVal = { b: p.b || 0, y: p.y || 0 };
+    $('#binsWhere').textContent = p.st;
+    renderBins(); $('#binsModal').hidden = false;
+  }
+  function renderBins() { $('#binsB').textContent = binsVal.b; $('#binsY').textContent = binsVal.y; }
+  $('#binsModal').addEventListener('click', e => {
+    if (e.target.id === 'binsModal') { $('#binsModal').hidden = true; return; }
+    const b = e.target.closest('[data-k]'); if (!b) return;
+    binsVal[b.dataset.k] = Math.max(0, Math.min(30, binsVal[b.dataset.k] + Number(b.dataset.d)));
+    renderBins();
+  });
+  $('#binsNo').addEventListener('click', () => { $('#binsModal').hidden = true; });
+  $('#binsYes').addEventListener('click', () => {
+    $('#binsModal').hidden = true;
+    if (!binsFor) return;
+    const c = NAR_CAT.get(normName(binsFor.st));
+    if (narEnqueue({ a: 'bins', name: c ? c.name : binsFor.st, b: binsVal.b, y: binsVal.y })) toast(binsFor.st + ': ' + contTxt({ kind: 'turg', b: binsVal.b, y: binsVal.y }) + '.');
   });
 
   // ---------- дневна / нощна карта (сменя се само картата) ----------

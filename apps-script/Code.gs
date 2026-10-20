@@ -12,6 +12,7 @@
  *   „Шофьори“  – имената, които приложението предлага (може да се редактира)
  *   „Търговски обекти“ – обектите с координати, адрес, телефон и бележка
  *   „Наряд …“  – по един лист на ден (напр. „Наряд Понеделник“): обектите в реда на обхода
+ *   „Промени в наряда“ – какво е добавено/махнато от търговския наряд за конкретна дата (от приложението)
  *   „Счупени“  – сигнали за счупени кофи от шофьорите; за всеки идва имейл (адресът е в лист „Настройки“).
  *                Когато кофата е оправена, напишете „Оправено“ в колона „Статус“ – маха се от приложението.
  *
@@ -29,6 +30,8 @@ var SHEET_OBJECTS = 'Търговски обекти';
 var NARIAD_PREFIX = 'Наряд';
 var SHEET_BROKEN = 'Счупени';
 var SHEET_SETTINGS = 'Настройки';
+var SHEET_CHANGES = 'Промени в наряда';
+var CHANGES_HEAD = ['Дата', 'Обект', 'Промяна', 'Шофьор', 'Час', 'Ширина', 'Дължина', 'Код'];
 // Кой получава известията за счупени кофи: адресът от листа „Настройки“ (ред „Известия…“, колона B,
 // може няколко, разделени със запетая). Ако там е празно – този адрес, а ако и той е празен – собственикът.
 var NOTIFY_TO = 'nikolay.dimitrov@alara.bg';
@@ -85,10 +88,27 @@ function handle_(p) {
         lock2.releaseLock();
       }
     }
+    // търговски наряд: добавени/махнати обекти за деня и бройките кофи по обект
+    var nar = p.nar;
+    if (typeof nar === 'string') { try { nar = JSON.parse(nar); } catch (err) { nar = null; } }
+    if (nar && nar.length) {
+      var lock3 = LockService.getScriptLock();
+      lock3.waitLock(20000);
+      try {
+        var done = [];
+        for (var q = 0; q < nar.length; q++) {
+          if (nar[q] && nar[q].id) { applyNar_(ss, nar[q]); done.push(nar[q].id); }
+        }
+        out.narApplied = done;
+      } finally {
+        lock3.releaseLock();
+      }
+      out.nariad = readNariad_(ss);
+    }
     out.broken = readBroken_(ss);
     out.visits = readState_(ss);
     out.drivers = readDrivers_(ss);
-    if (p.action === 'nariad' || p.nariad) out.nariad = readNariad_(ss);
+    if (!out.nariad && (p.action === 'nariad' || p.nariad)) out.nariad = readNariad_(ss);
     out.now = Date.now();
   } catch (err) {
     out.ok = false;
@@ -111,6 +131,13 @@ function ensureSheets_(ss) {
     var st = ss.insertSheet(SHEET_SETTINGS);
     st.getRange(1, 1, 1, 2).setValues([['Известия за счупени кофи до', '']]);
     st.getRange(1, 1).setFontWeight('bold');
+  }
+  if (!ss.getSheetByName(SHEET_CHANGES)) {
+    var c = ss.insertSheet(SHEET_CHANGES);
+    c.appendRow(CHANGES_HEAD);
+    c.setFrozenRows(1);
+    c.getRange(1, 1, 1, CHANGES_HEAD.length).setFontWeight('bold');
+    c.getRange('A2:A').setNumberFormat('@');
   }
   if (!ss.getSheetByName(SHEET_BROKEN)) {
     var b = ss.insertSheet(SHEET_BROKEN);
@@ -216,12 +243,107 @@ function readNariad_(ss) {
   for (var i = 0; i < sheets.length; i++) {
     var sh = sheets[i];
     var name = sh.getName();
-    if (name !== SHEET_OBJECTS && name.indexOf(NARIAD_PREFIX) !== 0) continue;
+    if (name !== SHEET_OBJECTS && name !== SHEET_CHANGES && name.indexOf(NARIAD_PREFIX) !== 0) continue;
     var lr = sh.getLastRow(), lc = Math.min(sh.getLastColumn(), 12);
     var values = (lr > 0 && lc > 0) ? sh.getRange(1, 1, lr, lc).getDisplayValues() : [];
+    if (name === SHEET_CHANGES && values.length > 801) values = [values[0]].concat(values.slice(values.length - 800));
     tabs.push({ name: name, values: values });
   }
   return { tabs: tabs, at: Date.now() };
+}
+
+// ---------- търговски наряд: промени за деня и кофи ----------
+var norm_ = function (s) {
+  return String(s || '').toLowerCase().replace(/ё/g, 'е').replace(/[„“"'`´’]/g, '').replace(/[\s\-–—_.,()\/]+/g, ' ').trim();
+};
+
+// Колоните в „Търговски обекти“ по заглавие; липсващите („Сини“, „Жълти“, „По заявка“) се добавят вдясно.
+function objectCols_(sh) {
+  var lc = Math.max(sh.getLastColumn(), 1);
+  var head = sh.getRange(1, 1, 1, lc).getDisplayValues()[0];
+  var col = {};
+  for (var i = 0; i < head.length; i++) {
+    var h = String(head[i] || '').toLowerCase();
+    if (/друг/.test(h)) col.alias = col.alias || i + 1;
+    else if (/обект/.test(h)) col.name = col.name || i + 1;
+    else if (/координат/.test(h)) col.ll = col.ll || i + 1;
+    else if (/син/.test(h)) col.b = col.b || i + 1;
+    else if (/жълт/.test(h)) col.y = col.y || i + 1;
+    else if (/заявк/.test(h)) col.req = col.req || i + 1;
+  }
+  var add = function (key, title) {
+    if (col[key]) return;
+    lc = Math.max(sh.getLastColumn(), lc) + 1;
+    sh.getRange(1, lc).setValue(title).setFontWeight('bold');
+    col[key] = lc;
+  };
+  add('b', 'Сини'); add('y', 'Жълти'); add('req', 'По заявка');
+  return col;
+}
+
+// Редът на обекта по име или по „Други имена“ (0 = няма такъв)
+function findObject_(sh, col, name) {
+  var n = sh.getLastRow() - 1;
+  if (n < 1) return 0;
+  var key = norm_(name);
+  var names = sh.getRange(2, col.name, n, 1).getDisplayValues();
+  for (var i = 0; i < n; i++) if (norm_(names[i][0]) === key) return i + 2;
+  if (col.alias) {
+    var al = sh.getRange(2, col.alias, n, 1).getDisplayValues();
+    for (var j = 0; j < n; j++) {
+      var parts = String(al[j][0] || '').split(/[;\n]+/);
+      for (var k = 0; k < parts.length; k++) if (norm_(parts[k]) === key) return j + 2;
+    }
+  }
+  return 0;
+}
+
+// Нов обект (по заявка) – добавя се в „Търговски обекти“ с 1 синя и 1 жълта кофа.
+function ensureObject_(ss, name, lat, lon) {
+  var sh = ss.getSheetByName(SHEET_OBJECTS);
+  if (!sh) return 0;
+  var col = objectCols_(sh);
+  var r = findObject_(sh, col, name);
+  if (r) return r;
+  var row = sh.getLastRow() + 1;
+  sh.getRange(row, col.name).setValue(name);
+  if (col.ll && lat != null && lon != null) sh.getRange(row, col.ll).setValue(lat.toFixed(6) + ', ' + lon.toFixed(6));
+  sh.getRange(row, col.b).setValue(1);
+  sh.getRange(row, col.y).setValue(1);
+  sh.getRange(row, col.req).setValue('да');
+  return row;
+}
+
+function applyNar_(ss, op) {
+  var name = String(op.name || '').trim().slice(0, 120);
+  if (!name) return;
+  var by = String(op.by || '').slice(0, 60);
+  var at = new Date(Number(op.at) || Date.now());
+  if (op.a === 'add' || op.a === 'del') {
+    var sh = ss.getSheetByName(SHEET_CHANGES);
+    var n = sh.getLastRow() - 1;
+    if (n > 0) {
+      var ids = sh.getRange(2, 8, n, 1).getValues();
+      for (var i = 0; i < ids.length; i++) if (String(ids[i][0]) === String(op.id)) return; // вече е записано
+    }
+    var lat = Number(op.lat), lon = Number(op.lon);
+    var hasLL = isFinite(lat) && isFinite(lon) && lat > 38 && lat < 48 && lon > 18 && lon < 32;
+    sh.appendRow([String(op.date || ''), name, op.a === 'add' ? 'Добавен' : 'Махнат', by, at, hasLL ? lat : '', hasLL ? lon : '', String(op.id)]);
+    if (op.a === 'add' && op.isNew) ensureObject_(ss, name, hasLL ? lat : null, hasLL ? lon : null);
+    return;
+  }
+  if (op.a === 'bins') {
+    var osh = ss.getSheetByName(SHEET_OBJECTS);
+    if (!osh) return;
+    var b = Math.max(0, Math.min(30, Math.round(Number(op.b) || 0)));
+    var y = Math.max(0, Math.min(30, Math.round(Number(op.y) || 0)));
+    var col = objectCols_(osh);
+    var r = findObject_(osh, col, name) || ensureObject_(ss, name, null, null);
+    if (!r) return;
+    osh.getRange(r, col.b).setValue(b);
+    osh.getRange(r, col.y).setValue(y);
+    ss.getSheetByName(SHEET_LOG).appendRow([at, 'Кофи: ' + b + ' сини, ' + y + ' жълти', 'Търговски', '', name, by, '']);
+  }
 }
 
 // ---------- сигнали за счупени кофи ----------

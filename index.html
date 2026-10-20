@@ -57,7 +57,7 @@
     <div class="summary">
       <div class="days" id="days" role="group" aria-label="Ден от наряда" hidden></div>
       <div class="count"><b id="doneN">0</b> от <span id="totN">0</span> минати</div>
-      <div class="yel"><i class="dot y"></i>Жълти: <b id="yelLeft">0</b> остават от <span id="yelTot">0</span></div>
+      <div class="yel" id="binSum"><i class="dot y" id="binDot"></i><span id="binLbl">Жълти:</span> <b id="yelLeft">0</b> остават от <span id="yelTot">0</span></div>
       <div class="yel" id="dayLbl" hidden></div>
       <div class="prog"><i id="barFill"></i></div>
     </div>
@@ -119,6 +119,31 @@
       <button class="btn" type="button" id="confirmNo">Отказ</button>
       <button class="btn solid-danger" type="button" id="confirmYes">Изчисти</button>
       <button class="btn solid-danger" type="button" id="confirmAll" hidden>И двата</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="narModal" hidden>
+  <div class="dialog tall" role="dialog" aria-modal="true" aria-labelledby="narTitle">
+    <div class="narhd"><h2 id="narTitle">Наряд</h2><button class="btn primary" type="button" id="narClose">Готово</button></div>
+    <p class="muted" id="narSub"></p>
+    <input id="narSearch" type="search" placeholder="Търси обект или напиши ново име" autocomplete="off" enterkeyhint="search">
+    <div class="narbody" id="narBody"></div>
+  </div>
+</div>
+
+<div class="modal" id="binsModal" hidden>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="binsTitle">
+    <h2 id="binsTitle">Колко кофи има?</h2>
+    <p class="muted" id="binsWhere"></p>
+    <div class="steps">
+      <div class="step"><i class="dot b"></i><span>Сини</span><button type="button" data-k="b" data-d="-1" aria-label="Една синя по-малко">−</button><b id="binsB">1</b><button type="button" data-k="b" data-d="1" aria-label="Една синя повече">+</button></div>
+      <div class="step"><i class="dot y"></i><span>Жълти</span><button type="button" data-k="y" data-d="-1" aria-label="Една жълта по-малко">−</button><b id="binsY">1</b><button type="button" data-k="y" data-d="1" aria-label="Една жълта повече">+</button></div>
+    </div>
+    <p class="muted">Записва се за обекта занапред и го виждат всички шофьори.</p>
+    <div class="row end">
+      <button class="btn" type="button" id="binsNo">Отказ</button>
+      <button class="btn primary" type="button" id="binsYes">Запази</button>
     </div>
   </div>
 </div>
