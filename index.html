@@ -127,8 +127,21 @@
   <div class="dialog tall" role="dialog" aria-modal="true" aria-labelledby="narTitle">
     <div class="narhd"><h2 id="narTitle">Наряд</h2><button class="btn primary" type="button" id="narClose">Готово</button></div>
     <p class="muted" id="narSub"></p>
+    <p class="narwho"><span id="narWho"></span> <button class="link" type="button" id="narOut">Изход</button></p>
     <input id="narSearch" type="search" placeholder="Търси обект или напиши ново име" autocomplete="off" enterkeyhint="search">
     <div class="narbody" id="narBody"></div>
+  </div>
+</div>
+
+<div class="modal" id="pinModal" hidden>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="pinTitle">
+    <h2 id="pinTitle">ПИН за наряда</h2>
+    <p class="muted">Търговският наряд се променя само от Ники и Тошко. Кодът се пита веднъж на този телефон.</p>
+    <form class="other" id="pinForm">
+      <div class="row"><input id="pinInput" type="password" inputmode="numeric" autocomplete="off" maxlength="12" placeholder="ПИН" aria-label="ПИН"><button class="btn primary" type="submit">Влез</button></div>
+    </form>
+    <p class="pinmsg" id="pinMsg" hidden></p>
+    <div class="row end"><button class="btn" type="button" id="pinNo">Отказ</button></div>
   </div>
 </div>
 

@@ -18,6 +18,7 @@
     warn: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9.5 17h-19z"/><path d="M12 10v4.5M12 17.5v.5"/></svg>',
     loc: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/></svg>',
     navmode: '<svg viewBox="0 0 24 24" aria-hidden="true" style="fill:currentColor;stroke-width:1.5"><path d="M12 2.5l7 18-7-4-7 4z"/></svg>',
+    lock: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>',
     edit: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/></svg>',
     plus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
     cross: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
@@ -45,7 +46,7 @@
     server: new Map(Object.entries(LS.get('obhod.server', {}))),
     queue: LS.get('obhod.queue', []),
     reports: LS.get('obhod.reports', []), reportsOld: false,
-    narq: LS.get('obhod.narq', []), narOld: false,
+    narq: LS.get('obhod.narq', []), narOld: false, pin: LS.get('obhod.pin', null),
     broken: new Map(Object.entries(LS.get('obhod.broken', {}))),
     drivers: LS.get('obhod.drivers', CFG.drivers || []),
     navApp: LS.get('obhod.nav', ''), routeSeq: [], pendingNav: null,
@@ -103,14 +104,19 @@
         const ops = S.queue.slice(0, 40), reports = S.reports.slice(0, 10), nar = S.narq.slice(0, 40);
         const body = { ops };
         if (reports.length) body.reports = reports;
-        if (nar.length) { body.nar = nar; body.nariad = 1; }
+        if (nar.length) { body.nar = nar; body.nariad = 1; if (S.pin && S.pin.pin) body.pin = S.pin.pin; }
         res = await fetchJSON(API, { method: 'POST', body: JSON.stringify(body) });
         if (res && res.ok) {
           if (nar.length) {
             // старият скрипт не познава промените в наряда – пазим ги, докато таблицата ги потвърди
             if (Array.isArray(res.narApplied)) {
-              const got = new Set(res.narApplied);
+              const got = new Set(res.narApplied.concat(res.narRejected || []));
+              if (res.narRejected && res.narRejected.length) {
+                setPin(null);
+                toast('ПИН кодът не е валиден – промените в наряда не са записани.');
+              }
               S.narq = S.narq.filter(o => !got.has(o.id)); LS.set('obhod.narq', S.narq); S.narOld = false;
+              if (TURG && NAR) applyTurg();
             } else S.narOld = true;
           }
           if (res.nariad && res.nariad.tabs) { LS.set('obhod.nariad', res.nariad); narErr = false; setNariad(res.nariad); }
@@ -929,7 +935,7 @@
     const warn = !!(today && name && name !== today);
     const dd = name ? fmtDay(dayDate(name)) : '';
     const txt = el('span', 'daytxt', (warn ? 'Не е днес' : (name ? 'Наряд ' + name.toLowerCase() : 'Няма наряд')) + (dd ? ' · ' + dd : ''));
-    const ed = el('button', 'dayedit'); ed.type = 'button'; ed.dataset.act = 'naredit'; ed.innerHTML = ICON.edit + '<span>Промени</span>';
+    const ed = el('button', 'dayedit' + (S.pin ? '' : ' locked')); ed.type = 'button'; ed.dataset.act = 'naredit'; ed.innerHTML = (S.pin ? ICON.edit : ICON.lock) + '<span>Промени</span>';
     ed.title = 'Добави или махни обекти за ' + (dd || 'деня');
     const st = el('button', 'stamp'); st.type = 'button'; st.dataset.act = 'nariad';
     st.title = 'Обнови наряда от таблицата';
@@ -1173,7 +1179,7 @@
     else if (act === 'install') openInstall(true);
     else if (act === 'broken') openBroken(t.dataset.id);
     else if (act === 'xfer') transferTo(t.dataset.key);
-    else if (act === 'naredit') openNarEditor();
+    else if (act === 'naredit') requirePin(openNarEditor);
     else if (act === 'bins') openBins(t.dataset.id);
     else if (act === 'nariad') { narErr = false; loadNariad(true); renderSummary(); }
   });
@@ -1283,7 +1289,9 @@
   // ---------- наряд за деня: добавяне (по заявка, нов обект) и махане ----------
   function narEnqueue(op) {
     if (!S.name) { openWho(); toast('Първо изберете кой сте.'); return false; }
-    op.id = uid(); op.at = Date.now(); op.by = S.name;
+    const isList = op.a === 'add' || op.a === 'del';
+    if (isList && !S.pin) { requirePin(() => renderNarEditor()); return false; }
+    op.id = uid(); op.at = Date.now(); op.by = isList ? S.pin.who : S.name;
     S.narq.push(op); LS.set('obhod.narq', S.narq);
     if (API) scheduleSync(50);
     applyTurg(); refresh();
@@ -1314,6 +1322,7 @@
     const count = I.items.length + I.added.length;
     $('#narTitle').textContent = 'Наряд ' + day.name.toLowerCase() + ', ' + fmtDay(I.date);
     $('#narSub').textContent = (isToday ? 'Днес · ' : '') + count + ' ' + plural(count, 'обект', 'обекта') + '. Промените са само за тази дата и ги виждат всички шофьори.';
+    $('#narWho').textContent = S.pin ? 'Променя: ' + S.pin.who : '';
     const sec = (title, rows) => { if (!rows.length) return; body.append(el('div', 'grp', title)); rows.forEach(r => body.append(r)); };
     const add = (name, extra) => () => { if (narEnqueue(Object.assign({ a: 'add', date: I.date, name }, extra || {}))) { $('#narSearch').value = ''; renderNarEditor(); } };
     const del = name => () => { if (narEnqueue({ a: 'del', date: I.date, name })) renderNarEditor(); };
@@ -1345,6 +1354,40 @@
     body.append(el('p', 'muted', 'За друг обект или нов по заявка – напиши името горе.'));
   }
   $('#narSearch').addEventListener('input', renderNarEditor);
+  $('#narOut').addEventListener('click', () => { setPin(null); $('#narModal').hidden = true; toast('Излязохте – нарядът се променя само с ПИН.'); });
+
+  // ---------- ПИН: търговският наряд се променя само от хората с ПИН в „Настройки“ (Ники, Тошко) ----------
+  function setPin(v) { S.pin = v; if (v) LS.set('obhod.pin', v); else { try { localStorage.removeItem('obhod.pin'); } catch (e) {} } refresh(); }
+  let pinThen = null;
+  function requirePin(then) {
+    if (S.pin && S.pin.pin) { then(); return; }
+    pinThen = then;
+    $('#pinInput').value = ''; $('#pinMsg').hidden = true;
+    $('#pinModal').hidden = false;
+    setTimeout(() => $('#pinInput').focus(), 50);
+  }
+  function pinMsg(t, neutral) { const m = $('#pinMsg'); m.textContent = t; m.hidden = false; m.classList.toggle('neutral', !!neutral); }
+  $('#pinForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const pin = $('#pinInput').value.trim();
+    if (!pin) return;
+    if (!API) { pinMsg('Таблицата не е свързана – ПИН кодът не може да се провери.'); return; }
+    const btn = $('#pinForm button'); btn.disabled = true; pinMsg('Проверявам…', true);
+    try {
+      const res = await fetchJSON(API, { method: 'POST', body: JSON.stringify({ ops: [], checkPin: 1, pin }) });
+      if (res && res.ok && res.pin && res.pin.ok) {
+        $('#pinModal').hidden = true;
+        setPin({ pin, who: res.pin.who });
+        toast('Влязохте като ' + res.pin.who + ' – може да променяте наряда.');
+        const t = pinThen; pinThen = null; if (t) t();
+      } else if (res && res.ok && !res.pin) pinMsg('Скриптът в таблицата трябва да се обнови, за да работят ПИН кодовете.');
+      else if (res && res.ok) { pinMsg('Грешен ПИН.'); $('#pinInput').select(); }
+      else pinMsg('Таблицата не отговаря. Опитайте пак.');
+    } catch (err) { pinMsg('Няма връзка с таблицата. Опитайте пак.'); }
+    btn.disabled = false;
+  });
+  $('#pinNo').addEventListener('click', () => { $('#pinModal').hidden = true; pinThen = null; });
+  $('#pinModal').addEventListener('click', e => { if (e.target.id === 'pinModal') { $('#pinModal').hidden = true; pinThen = null; } });
   $('#narClose').addEventListener('click', () => { $('#narModal').hidden = true; });
   $('#narModal').addEventListener('click', e => { if (e.target.id === 'narModal') $('#narModal').hidden = true; });
 

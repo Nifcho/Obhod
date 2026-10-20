@@ -349,7 +349,7 @@ body { font-weight: 500; letter-spacing: -.005em; }
 .acts.two .btn { min-height: 44px; font-size: 14px; }
 .btn.binsbtn { gap: 8px; }
 .btn.binsbtn .dots { gap: 3px; }
-.dialog.tall { max-height: calc(100dvh - 32px); grid-template-rows: auto auto auto minmax(0, 1fr); align-self: stretch; }
+.dialog.tall { max-height: calc(100dvh - 32px); grid-template-rows: auto auto auto auto minmax(0, 1fr); align-self: stretch; }
 .narhd { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .narhd h2 { font-size: 19px; }
 #narSearch { width: 100%; min-height: 46px; border-radius: 12px; border: 1px solid var(--line); padding: 0 14px; font: 500 16px var(--f-body); background: var(--bg); color: var(--ink); }
@@ -372,3 +372,9 @@ body { font-weight: 500; letter-spacing: -.005em; }
 .step span { font-weight: 700; }
 .step b { text-align: center; font: 800 22px var(--f-body); font-variant-numeric: tabular-nums; }
 .step button { height: 44px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font: 700 22px var(--f-body); cursor: pointer; color: var(--ink); }
+.dayedit.locked svg { color: var(--muted); }
+.narwho { margin: -6px 0 0; font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.narwho .link { padding: 4px 2px; font-size: 13px; }
+.pinmsg { margin: 0; font-size: 14px; font-weight: 600; color: var(--danger); }
+#pinInput { letter-spacing: .3em; font-size: 20px; }
+.pinmsg.neutral { color: var(--muted); }

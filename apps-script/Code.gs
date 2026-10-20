@@ -13,6 +13,8 @@
  *   „Търговски обекти“ – обектите с координати, адрес, телефон и бележка
  *   „Наряд …“  – по един лист на ден (напр. „Наряд Понеделник“): обектите в реда на обхода
  *   „Промени в наряда“ – какво е добавено/махнато от търговския наряд за конкретна дата (от приложението)
+ *                Наряда може да променя само човек с ПИН от лист „Настройки“ (редове „ПИН Ники“, „ПИН Тошко“ …,
+ *                колона B – кодът). Нов човек = нов ред „ПИН Име“; изтрит ред = край на достъпа.
  *   „Счупени“  – сигнали за счупени кофи от шофьорите; за всеки идва имейл (адресът е в лист „Настройки“).
  *                Когато кофата е оправена, напишете „Оправено“ в колона „Статус“ – маха се от приложението.
  *
@@ -88,18 +90,27 @@ function handle_(p) {
         lock2.releaseLock();
       }
     }
-    // търговски наряд: добавени/махнати обекти за деня и бройките кофи по обект
+    // ПИН за промяна на търговския наряд (проверка от приложението)
+    if (p.checkPin) { var who = pinOwner_(ss, p.pin); out.pin = { ok: !!who, who: who }; }
+    // търговски наряд: добавени/махнати обекти за деня (само с ПИН) и бройките кофи по обект (всички)
     var nar = p.nar;
     if (typeof nar === 'string') { try { nar = JSON.parse(nar); } catch (err) { nar = null; } }
     if (nar && nar.length) {
       var lock3 = LockService.getScriptLock();
       lock3.waitLock(20000);
       try {
-        var done = [];
+        var done = [], rejected = [], editor = pinOwner_(ss, p.pin);
         for (var q = 0; q < nar.length; q++) {
-          if (nar[q] && nar[q].id) { applyNar_(ss, nar[q]); done.push(nar[q].id); }
+          var o = nar[q];
+          if (!o || !o.id) continue;
+          if (o.a === 'add' || o.a === 'del') {
+            if (!editor) { rejected.push(o.id); continue; }
+            o.by = editor;
+          }
+          applyNar_(ss, o); done.push(o.id);
         }
         out.narApplied = done;
+        out.narRejected = rejected;
       } finally {
         lock3.releaseLock();
       }
@@ -256,6 +267,20 @@ function readNariad_(ss) {
 var norm_ = function (s) {
   return String(s || '').toLowerCase().replace(/ё/g, 'е').replace(/[„“"'`´’]/g, '').replace(/[\s\-–—_.,()\/]+/g, ' ').trim();
 };
+
+// ПИН кодовете от „Настройки“: ред „ПИН Име“, колона B – кодът. Връща името или ''.
+function pinOwner_(ss, pin) {
+  pin = String(pin == null ? '' : pin).trim();
+  if (!pin) return '';
+  var sh = ss.getSheetByName(SHEET_SETTINGS);
+  if (!sh || sh.getLastRow() < 1) return '';
+  var rows = sh.getRange(1, 1, sh.getLastRow(), 2).getDisplayValues();
+  for (var i = 0; i < rows.length; i++) {
+    var m = /^\s*пин\s+(.+?)\s*$/i.exec(String(rows[i][0] || ''));
+    if (m && String(rows[i][1] || '').trim() === pin) return m[1];
+  }
+  return '';
+}
 
 // Колоните в „Търговски обекти“ по заглавие; липсващите („Сини“, „Жълти“, „По заявка“) се добавят вдясно.
 function objectCols_(sh) {
