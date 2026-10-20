@@ -103,7 +103,7 @@ function handle_(p) {
         for (var q = 0; q < nar.length; q++) {
           var o = nar[q];
           if (!o || !o.id) continue;
-          if (o.a === 'add' || o.a === 'del') {
+          if (o.a !== 'bins') {   // добавяне, махане и ред на наряда – само с ПИН
             if (!editor) { rejected.push(o.id); continue; }
             o.by = editor;
           }
@@ -111,6 +111,7 @@ function handle_(p) {
         }
         out.narApplied = done;
         out.narRejected = rejected;
+        out.narCaps = ['order', 'tpl'];
       } finally {
         lock3.releaseLock();
       }
@@ -339,18 +340,81 @@ function ensureObject_(ss, name, lat, lon) {
   return row;
 }
 
+function changeLogged_(sh, id) {
+  var n = sh.getLastRow() - 1;
+  if (n <= 0) return false;
+  var ids = sh.getRange(2, 8, n, 1).getValues();
+  for (var i = 0; i < ids.length; i++) if (String(ids[i][0]) === String(id)) return true;
+  return false;
+}
+
+// Ред на каране за датата: „Обект 1 › Обект 2 › …“; празен списък = обратно по наряда за деня.
+function applyOrder_(ss, op, by, at) {
+  var sh = ss.getSheetByName(SHEET_CHANGES);
+  if (changeLogged_(sh, op.id)) return;
+  var names = (op.names || []).map(function (x) { return String(x || '').replace(/›/g, '>').trim().slice(0, 120); })
+    .filter(function (x) { return x; }).slice(0, 300);
+  sh.appendRow([String(op.date || ''), names.length ? names.join(' › ') : '—', names.length ? 'Подреден' : 'Ред по шаблона', by, at, '', '', String(op.id)]);
+}
+
+// „За всеки <ден>“: преномерира „№“ в листа „Наряд <ден>“ по новия ред и подрежда редовете по него.
+// Редовете без № (по заявка) остават без номер, след номерираните.
+function applyTpl_(ss, op, by, at) {
+  var day = String(op.day || '').trim();
+  var sh = null;
+  ss.getSheets().forEach(function (s) {
+    var nm = s.getName();
+    if (!sh && /^наряд/i.test(nm) && norm_(nm.replace(/^наряд[\s:–\-]*/i, '')) === norm_(day)) sh = s;
+  });
+  if (!sh) return;
+  var last = sh.getLastRow(), lastCol = sh.getLastColumn();
+  if (last < 2 || lastCol < 1) return;
+  var vals = sh.getRange(1, 1, last, lastCol).getValues();
+  var hi = -1;
+  for (var i = 0; i < Math.min(vals.length, 6); i++) {
+    if (vals[i].some(function (v) { return /обект/i.test(String(v)); })) { hi = i; break; }
+  }
+  if (hi < 0) return;
+  var cNum = -1, cName = -1;
+  vals[hi].forEach(function (h, j) {
+    h = String(h || '').toLowerCase().trim();
+    if (cName < 0 && /обект/.test(h) && !/друг/.test(h)) cName = j;
+    if (cNum < 0 && (h === '№' || h === 'ред' || /номер/.test(h))) cNum = j;
+  });
+  if (cNum < 0 || cName < 0) return;
+  var pos = {};
+  (op.names || []).forEach(function (n, k) { var key = norm_(n); if (key && pos[key] == null) pos[key] = k; });
+  var rows = [];
+  for (var r = hi + 1; r < vals.length; r++) {
+    var name = String(vals[r][cName] || '').trim(), num = String(vals[r][cNum] == null ? '' : vals[r][cNum]).trim();
+    if (name && num !== '') rows.push({ r: r, key: norm_(name), num: parseFloat(num), i: rows.length });
+  }
+  if (!rows.length) return;
+  rows.sort(function (a, b) {
+    var pa = pos[a.key], pb = pos[b.key];
+    if (pa != null && pb != null) return pa - pb;
+    if (pa != null) return -1;
+    if (pb != null) return 1;
+    return (isFinite(a.num) && isFinite(b.num) ? a.num - b.num : 0) || a.i - b.i;
+  });
+  var col = [];
+  for (var q = hi + 1; q < vals.length; q++) col.push([vals[q][cNum]]);
+  rows.forEach(function (x, k) { col[x.r - hi - 1] = [k + 1]; });
+  sh.getRange(hi + 2, cNum + 1, col.length, 1).setValues(col);
+  sh.getRange(hi + 2, 1, col.length, lastCol).sort({ column: cNum + 1, ascending: true });
+  ss.getSheetByName(SHEET_LOG).appendRow([at, 'Нов ред на наряда за всеки ден', 'Търговски – ' + day, '', '', by, '']);
+}
+
 function applyNar_(ss, op) {
-  var name = String(op.name || '').trim().slice(0, 120);
-  if (!name) return;
   var by = String(op.by || '').slice(0, 60);
   var at = new Date(Number(op.at) || Date.now());
+  if (op.a === 'order') return applyOrder_(ss, op, by, at);
+  if (op.a === 'tpl') return applyTpl_(ss, op, by, at);
+  var name = String(op.name || '').trim().slice(0, 120);
+  if (!name) return;
   if (op.a === 'add' || op.a === 'del') {
     var sh = ss.getSheetByName(SHEET_CHANGES);
-    var n = sh.getLastRow() - 1;
-    if (n > 0) {
-      var ids = sh.getRange(2, 8, n, 1).getValues();
-      for (var i = 0; i < ids.length; i++) if (String(ids[i][0]) === String(op.id)) return; // вече е записано
-    }
+    if (changeLogged_(sh, op.id)) return; // вече е записано
     var lat = Number(op.lat), lon = Number(op.lon);
     var hasLL = isFinite(lat) && isFinite(lon) && lat > 38 && lat < 48 && lon > 18 && lon < 32;
     sh.appendRow([String(op.date || ''), name, op.a === 'add' ? 'Добавен' : 'Махнат', by, at, hasLL ? lat : '', hasLL ? lon : '', String(op.id)]);

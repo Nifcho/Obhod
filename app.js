@@ -23,7 +23,8 @@
     plus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
     cross: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
     xfer: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h14M13 6l6 6-6 6"/></svg>',
-    undo: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/></svg>'
+    undo: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/></svg>',
+    grip: '<svg viewBox="0 0 24 24" aria-hidden="true" style="stroke-width:3.4"><path d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01"/></svg>'
   };
 
   const byKey = {}, ptById = {};
@@ -110,12 +111,14 @@
           if (nar.length) {
             // старият скрипт не познава промените в наряда – пазим ги, докато таблицата ги потвърди
             if (Array.isArray(res.narApplied)) {
-              const got = new Set(res.narApplied.concat(res.narRejected || []));
+              // по-стар скрипт приема реда, но не го записва – тези промени остават да чакат
+              const caps = new Set(res.narCaps || []), unsup = o => (o.a === 'order' || o.a === 'tpl') && !caps.has(o.a);
+              const got = new Set(res.narApplied.concat(res.narRejected || []).filter(id => !nar.some(o => o.id === id && unsup(o))));
               if (res.narRejected && res.narRejected.length) {
                 setPin(null);
                 toast('ПИН кодът не е валиден – промените в наряда не са записани.');
               }
-              S.narq = S.narq.filter(o => !got.has(o.id)); LS.set('obhod.narq', S.narq); S.narOld = false;
+              S.narq = S.narq.filter(o => !got.has(o.id)); LS.set('obhod.narq', S.narq); S.narOld = nar.some(unsup);
               if (TURG && NAR) applyTurg();
             } else S.narOld = true;
           }
@@ -292,7 +295,8 @@
     });
     return pts;
   }
-  // „Промени в наряда“: Дата | Обект | Промяна (Добавен/Махнат) | Шофьор | Час | Ширина | Дължина | Код
+  // „Промени в наряда“: Дата | Обект | Промяна (Добавен/Махнат/Подреден/Ред по шаблона) | Шофьор | Час | Ширина | Дължина | Код
+  // при „Подреден“ в „Обект“ е целият ред на каране за датата: „Обект 1 › Обект 2 › …“
   function parseChanges(values) {
     values = values || []; const out = [];
     const head = (values[0] || []).map(h => String(h || '').toLowerCase());
@@ -301,12 +305,19 @@
     if (c.date < 0 || c.name < 0 || c.op < 0) return out;
     for (let i = 1; i < values.length; i++) {
       const r = values[i] || [], g = k => (c[k] < 0 || r[c[k]] == null ? '' : String(r[c[k]]).trim());
-      const date = normDate(g('date')), name = g('name'); if (!date || !name) continue;
-      const op = /махн|del|-/i.test(g('op')) ? 'del' : 'add';
+      const date = normDate(g('date')), name = g('name'), opTxt = g('op'); if (!date) continue;
+      if (/подред|шаблон|^ред(\s|$)|order/i.test(opTxt)) {
+        const names = /шаблон/i.test(opTxt) ? [] : name.split(ORD_SEP).map(x => x.trim()).filter(Boolean);
+        out.push({ date, op: 'order', names, by: g('by'), at: parseWhen(g('at')) + i / 1000, id: g('id') });
+        continue;
+      }
+      if (!name) continue;
+      const op = /махн|del|-/i.test(opTxt) ? 'del' : 'add';
       out.push({ date, name, op, by: g('by'), at: parseWhen(g('at')) + i / 1000, ll: parseLL(g('lat') + '; ' + g('lon')), id: g('id') });
     }
     return out;
   }
+  const ORD_SEP = /\s*›\s*/;
   // „2026-10-20“, „20.10.2026“ или „10/20/2026“ → „2026-10-20“
   function normDate(s) {
     let m = String(s || '').match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
@@ -320,13 +331,19 @@
     if (m) return new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5], +(m[6] || 0)).getTime();
     const t = Date.parse(s); return isNaN(t) ? 0 : t;
   }
+  // редовете с № се карат по номера (ако всички номера са числа); без № (по заявка) – след тях
+  function byNum(items) {
+    const num = items.filter(it => it.num !== ''), cand = items.filter(it => it.num === '');
+    if (!num.length || num.some(it => it.num == null || !isFinite(parseFloat(it.num)))) return items;
+    return num.map((it, i) => [it, i]).sort((a, b) => parseFloat(a[0].num) - parseFloat(b[0].num) || a[1] - b[1]).map(x => x[0]).concat(cand);
+  }
   function parseNariad(raw) {
     let catRows = [], changes = []; const tabs = [];
     for (const t of (raw && raw.tabs) || []) {
       const nm = String(t.name || '').trim();
       if (normName(nm) === 'търговски обекти') catRows = parseTable(t.values);
       else if (normName(nm) === 'промени в наряда') changes = parseChanges(t.values);
-      else if (/^наряд/i.test(nm)) tabs.push({ name: nm.replace(/^наряд[\s:–\-]*/i, '').trim() || nm, items: parseTable(t.values) });
+      else if (/^наряд/i.test(nm)) tabs.push({ name: nm.replace(/^наряд[\s:–\-]*/i, '').trim() || nm, items: byNum(parseTable(t.values)) });
     }
     const cat = new Map(), catList = [];
     for (const r of catRows) { const k = normName(r.name); if (k && !cat.has(k)) { cat.set(k, r); catList.push(r); } }
@@ -361,17 +378,33 @@
     const m = new Map();
     const pend = S.narq.filter(o => (o.a === 'add' || o.a === 'del') && o.date === date)
       .map(o => ({ date: o.date, name: o.name, op: o.a, by: o.by, at: o.at, ll: o.lat != null ? { lat: o.lat, lon: o.lon } : null, pending: true }));
+    // по реда в таблицата (последният записан печели), а промените от този телефон – над тях (часовниците на телефоните се различават)
     for (const c of ((NAR && NAR.changes) || []).concat(pend)) {
-      if (c.date !== date) continue;
-      const k = canonKey(c.name), prev = m.get(k);
-      if (!prev || prev.at <= c.at) m.set(k, c);
+      if (c.date !== date || c.op === 'order') continue;
+      m.set(canonKey(c.name), c);
     }
     return m;
+  }
+  // редът на каране за датата (последното „Подреден“); празен списък = по шаблона
+  function dayOrder(date) {
+    let best = null;
+    for (const c of (NAR && NAR.changes) || []) if (c.op === 'order' && c.date === date) best = c;   // последният ред в таблицата
+    for (const o of S.narq) if (o.a === 'order' && o.date === date) best = { date, op: 'order', names: o.names || [], by: o.by, at: o.at, pending: true };
+    return best && best.names.length ? best : null;
+  }
+  // „За всеки ден“, докато таблицата не го потвърди – шаблонът се показва вече в новия ред
+  function tplItems(day) {
+    let op = null; for (const o of S.narq) if (o.a === 'tpl' && normName(o.day) === normName(day.name)) op = o;
+    const items = day.items || [];
+    if (!op) return items;
+    const pos = new Map((op.names || []).map((n, i) => [canonKey(n), i])), k = it => canonKey(it.name);
+    const num = items.filter(it => !isCand(it));
+    return num.filter(it => pos.has(k(it))).sort((a, b) => pos.get(k(a)) - pos.get(k(b))).concat(num.filter(it => !pos.has(k(it))), items.filter(isCand));
   }
   function dayInfo(day) {
     const date = dayDate(day.name), ch = dayChanges(date);
     const items = [], removed = [], keys = new Set();
-    for (const it of day.items || []) {
+    for (const it of tplItems(day)) {
       if (isCand(it)) continue;
       const k = canonKey(it.name), c = ch.get(k);
       if (keys.has(k)) continue;
@@ -386,9 +419,17 @@
   }
   const llOfItem = it => it.ll || ((NAR_CAT.get(normName(it.name)) || {}).ll) || null;
   // добавените се вмъкват там, където най-малко удължават обхода
+  // ако редът е сменен с плъзгане – по него; обектите, които не са в него, също се вмъкват най-изгодно
   function buildEffective(day) {
-    const I = dayInfo(day), list = I.items.slice();
-    for (const a of I.added) {
+    const I = dayInfo(day), ord = dayOrder(I.date), k = it => canonKey(it.name);
+    let list = I.items.slice(), rest = I.added;
+    if (ord) {
+      const pos = new Map(ord.names.map((n, i) => [canonKey(n), i])), all = I.items.concat(I.added);
+      list = all.filter(it => pos.has(k(it))).sort((a, b) => pos.get(k(a)) - pos.get(k(b)));
+      rest = all.filter(it => !pos.has(k(it)));
+    }
+    I.order = ord;
+    for (const a of rest) {
       const ll = llOfItem(a); let pos = list.length;
       if (ll) {
         let best = Infinity;
@@ -1027,8 +1068,9 @@
       const two = el('div', 'acts two'); two.append(bb, rb); card.append(two);
     } else card.append(rb);
   }
-  function rowEl(p, withGroup) {
-    const li = el('li', 'row ' + p.shape + (V.has(p.id) ? ' done' : '') + (S.sel === p.id ? ' sel' : '')); li.dataset.id = p.id;
+  function rowEl(p, withGroup, grip) {
+    const li = el('li', 'row ' + p.shape + (V.has(p.id) ? ' done' : '') + (S.sel === p.id ? ' sel' : '') + (grip ? ' drag' : '')); li.dataset.id = p.id;
+    if (grip) { const g = el('span', 'grip'); g.innerHTML = ICON.grip; g.title = 'Задръж и плъзни, за да смениш реда'; g.setAttribute('aria-hidden', 'true'); li.append(g); }
     const m = el('button', 'rowmain'); m.type = 'button'; m.dataset.act = 'select'; m.dataset.id = p.id;
     const txt = el('span', 'txt'); txt.append(el('span', 'st', p.st || '—'), subEl(p, withGroup));
     m.append(el('span', 'num' + (p.n.length > 3 ? ' long' : ''), p.n), txt);
@@ -1050,7 +1092,9 @@
   }
   const sortOf = r => (S.sort === 'route' && !chainOf(r) ? 'num' : S.sort);
   function renderList() {
+    if (drag) { listDirty = true; return; }   // не пречим на плъзгането – ще се обнови след него
     const r = cur(), ul = $('#list'); ul.textContent = '';
+    if (r.kind === 'turg') ordBar(r, ul);
     let pts = r.ordered;
     if (S.filter === 'left') pts = pts.filter(p => !V.has(p.id));
     if (S.filter === 'done') pts = pts.filter(p => V.has(p.id));
@@ -1068,11 +1112,120 @@
       pts.slice().sort((a, b) => (a.ll ? distM(S.pos, a) : 1e12) - (b.ll ? distM(S.pos, b) : 1e12)).forEach(p => ul.append(rowEl(p, multi)));
       return;
     }
+    const grip = canDrag(r) && pts.length > 1;
     for (const g of r.groups) {
       const gp = pts.filter(p => p.grp === g); if (!gp.length) continue;
       if (multi) ul.append(el('li', 'grp', g + ' · ' + gp.length));
-      gp.forEach(p => ul.append(rowEl(p, false)));
+      gp.forEach(p => ul.append(rowEl(p, false, grip)));
     }
+  }
+
+  // ---------- търговски: редът на каране се сменя с плъзгане (само Ники и Тошко – с ПИН) ----------
+  let drag = null, listDirty = false, tplArm = 0;
+  const canDrag = r => r.kind === 'turg' && !!NAR && !!S.pin && !!S.turgDay && sortOf(r) === 'num';
+  // ред над списъка: кой е сменил реда за датата; „За всеки <ден>“ (записва шаблона) и „Върни“
+  function ordBar(r, ul) {
+    const day = S.turgDay && dayOf(S.turgDay); if (!day || !r.pts.length) return;
+    const E = buildEffective(day), I = E.I, ord = I.order;
+    const tpl = I.items.map(it => canonKey(it.name)), tset = new Set(tpl);
+    const same = E.pts.map(p => p.okey).filter(k => tset.has(k)).join('|') === tpl.join('|');
+    const bar = el('li', 'ordbar');
+    if (ord && !same) {
+      bar.append(el('span', 'otxt', 'Редът за ' + fmtDay(I.date) + ' е сменен' + (ord.by ? ' от ' + ord.by : '') + (ord.pending ? ' · записва се…' : '')));
+      if (S.pin) {
+        const a = el('button', 'obtn' + (tplArm > Date.now() ? ' arm' : ''), tplArm > Date.now() ? 'Сигурно? Запази' : 'За ' + everyDay(day.name)); a.type = 'button'; a.dataset.act = 'ordtpl';
+        const b = el('button', 'obtn'); b.type = 'button'; b.dataset.act = 'ordreset'; b.innerHTML = ICON.undo + '<span>Върни</span>';
+        bar.append(a, b);
+      }
+    } else if (S.pin && sortOf(r) === 'num') {
+      const t = el('span', 'otxt hint'); t.innerHTML = 'Задръж ' + ICON.grip + ' и плъзни обекта, за да смениш реда на каране.'; bar.append(t);
+    } else if (S.pin) bar.append(el('span', 'otxt hint', 'За смяна на реда избери „По номер“.'));
+    else return;
+    ul.append(bar);
+  }
+  const everyDay = n => { n = normName(n); return (/^(сряда|събота|неделя)$/.test(n) ? 'всяка ' : 'всеки ') + n; };
+  function scrollerOf(n) {
+    for (let x = n.parentElement; x && x !== document.body; x = x.parentElement) {
+      const o = getComputedStyle(x).overflowY; if ((o === 'auto' || o === 'scroll') && x.scrollHeight > x.clientHeight) return x;
+    }
+    return document.scrollingElement || document.documentElement;
+  }
+  $('#list').addEventListener('pointerdown', e => {
+    const g = e.target.closest('.grip'); if (!g || drag || e.button > 0) return;
+    const li = g.closest('li.row'), ul = $('#list'), rows = Array.from(ul.querySelectorAll('li.row'));
+    if (!li || rows.length < 2) return;
+    e.preventDefault();
+    try { g.setPointerCapture(e.pointerId); } catch (err) {}
+    const ur = ul.getBoundingClientRect();
+    const geo = rows.map(x => { const b = x.getBoundingClientRect(); return { top: b.top - ur.top, h: b.height }; });
+    const i0 = rows.indexOf(li);
+    drag = { li, rows, geo, i0, idx: i0, pid: e.pointerId, y0: e.clientY - ur.top, y: e.clientY, sc: scrollerOf(ul), raf: 0, moved: false };
+    li.classList.add('dragging'); ul.classList.add('sorting');
+    if (navigator.vibrate) try { navigator.vibrate(12); } catch (err) {}
+    dragLoop();
+  });
+  $('#list').addEventListener('pointermove', e => { if (drag && e.pointerId === drag.pid) { drag.y = e.clientY; e.preventDefault(); } });
+  $('#list').addEventListener('pointerup', e => { if (drag && e.pointerId === drag.pid) dragEnd(true); });
+  $('#list').addEventListener('pointercancel', e => { if (drag && e.pointerId === drag.pid) dragEnd(false); });
+  $('#list').addEventListener('lostpointercapture', e => { if (drag && e.pointerId === drag.pid) dragEnd(true); });
+  function dragPos() {
+    const d = drag, ur = $('#list').getBoundingClientRect();
+    const dy = (d.y - ur.top) - d.y0;    // движението в координатите на списъка (с превъртането)
+    if (Math.abs(dy) > 4) d.moved = true;
+    const me = d.geo[d.i0], step = me.h + 6, mid = me.top + me.h / 2 + dy;
+    let idx = 0; d.geo.forEach((gm, i) => { if (i !== d.i0 && gm.top + gm.h / 2 < mid) idx++; });
+    d.idx = idx;
+    d.li.style.transform = 'translateY(' + dy + 'px)';
+    d.rows.forEach((x, i) => {
+      if (i === d.i0) return;
+      const sh = d.i0 < idx && i > d.i0 && i <= idx ? -step : (d.i0 > idx && i >= idx && i < d.i0 ? step : 0);
+      x.style.transform = sh ? 'translateY(' + sh + 'px)' : '';
+    });
+  }
+  function dragLoop() {
+    const d = drag; if (!d) return;
+    const sc = d.sc, r = sc === document.scrollingElement || sc === document.documentElement ? { top: 0, bottom: innerHeight } : sc.getBoundingClientRect();
+    const edge = Math.min(56, (r.bottom - r.top) * 0.13); let v = 0;   // до ръба – списъкът се превърта
+    if (d.y < r.top + edge) v = -(r.top + edge - d.y) / 3; else if (d.y > r.bottom - edge) v = (d.y - (r.bottom - edge)) / 3;
+    if (v && d.moved) sc.scrollTop += Math.max(-22, Math.min(22, v));
+    dragPos();
+    d.raf = requestAnimationFrame(dragLoop);
+  }
+  function dragEnd(ok) {
+    const d = drag; if (!d) return;
+    drag = null; cancelAnimationFrame(d.raf);
+    $('#list').classList.remove('sorting');
+    d.rows.forEach(x => { x.style.transform = ''; }); d.li.classList.remove('dragging');
+    const moved = ok && d.moved && d.idx !== d.i0;
+    if (moved) {
+      const vis = d.rows.map(x => x.dataset.id), id = vis.splice(d.i0, 1)[0];
+      vis.splice(d.idx, 0, id);
+      if (reorderTurg(id, vis)) return;
+    }
+    if (moved || listDirty) { listDirty = false; renderList(); }
+  }
+  // видимият ред (може да е само „Остават“) → целият ред за деня
+  function reorderTurg(id, vis) {
+    const all = TURG.pts.map(p => p.id).filter(x => x !== id), k = vis.indexOf(id);
+    if (k < vis.length - 1) all.splice(all.indexOf(vis[k + 1]), 0, id); else all.splice(all.indexOf(vis[k - 1]) + 1, 0, id);
+    const date = dayDate(S.turgDay), name = ptById[id].st;
+    listDirty = false;
+    if (!narEnqueue({ a: 'order', date, names: all.map(x => ptById[x].st) })) { renderList(); return false; }
+    const p = TURG.pts.find(x => x.okey === canonKey(name));
+    toast(name + (p ? ' е №\u00a0' + p.n : '') + ' за ' + fmtDay(date) + '.');
+    return true;
+  }
+  // „За всеки <ден>“: шаблонът (листът „Наряд <ден>“) взема новия ред; махнатите за датата остават до съседите си
+  function saveTplOrder() {
+    const day = dayOf(S.turgDay); if (!day) return;
+    const old = tplItems(day).filter(it => !isCand(it)), nm = new Map(old.map(it => [canonKey(it.name), it.name]));
+    const out = TURG.pts.map(p => p.okey).filter(k => nm.has(k));
+    old.map(it => canonKey(it.name)).forEach((k, i, arr) => {
+      if (out.includes(k)) return;
+      let j = i - 1; while (j >= 0 && !out.includes(arr[j])) j--;
+      out.splice(j < 0 ? 0 : out.indexOf(arr[j]) + 1, 0, k);
+    });
+    if (narEnqueue({ a: 'tpl', day: day.name, date: dayDate(day.name), names: out.map(k => nm.get(k)) })) toast('Редът е запазен за ' + everyDay(day.name) + '.');
   }
   function updateListDistances() {
     if (!S.pos) return;
@@ -1087,7 +1240,7 @@
     renderRoutes(); renderWho(); renderSync(); renderSummary(); renderCard(); renderFilters(); renderList(); updateMarkers(); drawTrack();
     const ch = chainOf(cur()), grp = chainRoutes(ch);
     $('#trkFoot').hidden = !ch;
-    if (ch) $('#trkFoot').textContent = 'Лилавата линия е приблизителният маршрут по ' + ch.src + '.' + (grp.length > 1 ? ' ' + grp.map(x => x.name).join(' и ') + ' се карат заедно – когато следващата точка е в другия наряд, приложението те прехвърля там.' : '') + ' Линията се скрива с бутона вдясно на картата.';
+    if (ch) $('#trkFoot').textContent = 'Линията на картата е приблизителният маршрут по ' + ch.src + '.' + (grp.length > 1 ? ' ' + grp.map(x => x.name).join(' и ') + ' се карат заедно – когато следващата точка е в другия наряд, приложението те прехвърля там.' : '') + ' Линията се скрива с бутона вдясно на картата.';
   }
 
   // ---------- actions ----------
@@ -1180,6 +1333,8 @@
     else if (act === 'broken') openBroken(t.dataset.id);
     else if (act === 'xfer') transferTo(t.dataset.key);
     else if (act === 'naredit') requirePin(openNarEditor);
+    else if (act === 'ordtpl') { if (tplArm > Date.now()) { tplArm = 0; saveTplOrder(); } else { tplArm = Date.now() + 4000; renderList(); setTimeout(() => { if (tplArm && tplArm <= Date.now()) { tplArm = 0; renderList(); } }, 4100); } }
+    else if (act === 'ordreset') { if (narEnqueue({ a: 'order', date: dayDate(S.turgDay), names: [] })) toast('Редът за ' + fmtDay(dayDate(S.turgDay)) + ' е върнат по наряда.'); }
     else if (act === 'bins') openBins(t.dataset.id);
     else if (act === 'nariad') { narErr = false; loadNariad(true); renderSummary(); }
   });
@@ -1289,7 +1444,7 @@
   // ---------- наряд за деня: добавяне (по заявка, нов обект) и махане ----------
   function narEnqueue(op) {
     if (!S.name) { openWho(); toast('Първо изберете кой сте.'); return false; }
-    const isList = op.a === 'add' || op.a === 'del';
+    const isList = op.a !== 'bins';   // добавяне, махане, ред – само с ПИН
     if (isList && !S.pin) { requirePin(() => renderNarEditor()); return false; }
     op.id = uid(); op.at = Date.now(); op.by = isList ? S.pin.who : S.name;
     S.narq.push(op); LS.set('obhod.narq', S.narq);
@@ -1351,7 +1506,7 @@
     sec('По заявка за ' + day.name.toLowerCase(), I.cands.map(it => narRow(it.name, 'не е включен сам – добави го, ако има заявка', PLUS, 'add', add(it.name))));
     sec('В наряда · ' + count, inList.map(x => narRow(x.n + '. ' + x.name, x.added ? 'добавен' + (x.added.by ? ' от ' + x.added.by : '') : '', CROSS, 'del', del(x.name))));
     sec('Махнати · ' + I.removed.length, I.removed.map(x => narRow(x.name, 'махнат' + (x.ch && x.ch.by ? ' от ' + x.ch.by : ''), ICON.undo + '<span>Върни</span>', 'add', add(x.name))));
-    body.append(el('p', 'muted', 'За друг обект или нов по заявка – напиши името горе.'));
+    body.append(el('p', 'muted', 'За друг обект или нов по заявка – напиши името горе. Редът на каране се сменя в списъка („По номер“) – задръж точките вляво от обекта и го плъзни.'));
   }
   $('#narSearch').addEventListener('input', renderNarEditor);
   $('#narOut').addEventListener('click', () => { setPin(null); $('#narModal').hidden = true; toast('Излязохте – нарядът се променя само с ПИН.'); });

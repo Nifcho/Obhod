@@ -378,3 +378,20 @@ body { font-weight: 500; letter-spacing: -.005em; }
 .pinmsg { margin: 0; font-size: 14px; font-weight: 600; color: var(--danger); }
 #pinInput { letter-spacing: .3em; font-size: 20px; }
 .pinmsg.neutral { color: var(--muted); }
+
+/* ---------- търговски: смяна на реда с плъзгане ---------- */
+.row.drag { grid-template-columns: 30px minmax(0, 1fr) 50px 58px; }
+.row.drag .rowmain { padding-left: 4px; }
+.grip { display: grid; place-items: center; color: var(--muted); touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.grip svg { width: 20px; height: 20px; }
+.list.sorting, .list.sorting * { user-select: none; -webkit-user-select: none; }
+.list.sorting .row { transition: transform .16s ease; }
+.list.sorting .row.dragging { transition: none; position: relative; z-index: 5; cursor: grabbing; border-color: var(--accent); box-shadow: 0 10px 26px rgba(0, 0, 0, .28); }
+.list.sorting .row.dragging .grip { color: var(--accent); }
+.ordbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 8px 10px; border-radius: 12px; background: var(--chip, rgba(127, 127, 127, .1)); font-size: 13px; }
+.ordbar .otxt { flex: 1 1 100%; min-width: 0; font-weight: 600; }
+.ordbar .otxt.hint { font-weight: 500; color: var(--muted); }
+.ordbar .otxt svg { width: 15px; height: 15px; vertical-align: -3px; margin: 0 1px; }
+.ordbar .obtn { display: inline-flex; align-items: center; gap: 5px; min-height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: inherit; font: 600 13px var(--f-body); cursor: pointer; }
+.ordbar .obtn svg { width: 16px; height: 16px; }
+.ordbar .obtn.arm { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
