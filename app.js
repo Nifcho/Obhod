@@ -5,6 +5,7 @@
   const CFG = window.OBHOD_CONFIG || {};
   const API = String(CFG.apiUrl || '').trim();
   const ROUTES = window.ROUTES || [];
+  if (!ROUTES.length) throw new Error('Няма точки – файлът data.js не се зареди.');
   const $ = s => document.querySelector(s);
   const LS = {
     get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
@@ -1667,6 +1668,7 @@
   started = true;
   buildMarkers();
   refresh();
+  window.__obhodStarted = true;
   setTimeout(() => { map.invalidateSize(); const left = cur().pts.filter(p => !V.has(p.id)); fitTo(left.length ? left : cur().pts); }, 60);
   window.addEventListener('resize', () => { if (S.nav) { navSize(true); navUpdate(true); } else map.invalidateSize(); });
   // долният лист е толкова висок, колкото е съдържанието му – картата се преоразмерява с него
@@ -1678,27 +1680,11 @@
   keepAwake();
   if (API) { sync(); loadNariad(true); }
   if (!S.name) openWho();
-  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-    // Нова версия: проверява при всяко връщане в приложението и на 10 мин.; презарежда само, когато никой не пипа нищо.
-    navigator.serviceWorker.register('sw.js').then(reg => {
-      const check = () => { if (navigator.onLine !== false) reg.update().catch(() => {}); };
-      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
-      setInterval(check, 10 * 60e3);
-    }).catch(() => {});
-    let hadCtrl = !!navigator.serviceWorker.controller, wantReload = false, lastTouch = 0;
-    ['pointerdown', 'keydown', 'input'].forEach(ev => document.addEventListener(ev, () => { lastTouch = Date.now(); }, { passive: true, capture: true }));
-    const safeReload = () => {
-      if (!wantReload) return;
-      const busy = drag || S.nav || Array.from(document.querySelectorAll('.modal')).some(m => !m.hidden) ||
-        (document.visibilityState === 'visible' && Date.now() - lastTouch < 8000);
-      if (busy) { setTimeout(safeReload, 4000); return; }
-      wantReload = false; location.reload();
-    };
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (!hadCtrl) { hadCtrl = true; return; }   // първо инсталиране – няма какво да се обновява
-      wantReload = true; safeReload();
-    });
-  }
+  // нова версия: проверката и презареждането са в index.html (тръгват преди всичко); тук само казваме кога е удобно
+  let lastTouch = 0;
+  ['pointerdown', 'keydown', 'input'].forEach(ev => document.addEventListener(ev, () => { lastTouch = Date.now(); }, { passive: true, capture: true }));
+  window.__obhodBusy = () => !!(drag || S.nav || Array.from(document.querySelectorAll('.modal')).some(m => !m.hidden) ||
+    (document.visibilityState === 'visible' && Date.now() - lastTouch < 8000));
   setInterval(() => {
     renderSync();
     if (!TURG || !NAR) return;

@@ -196,6 +196,55 @@
 
 <div class="toast" id="toast" role="status" hidden></div>
 
+<script>
+// Пазач: тръгва преди всичко останало.
+// 1) Нова версия стига до телефона и презарежда, дори ако приложението не е успяло да тръгне.
+// 2) Ако приложението не тръгне (не се е заредил файл, грешка) – показва причината и бутон „Презареди“, вместо празен екран.
+(function () {
+  var errs = [];
+  window.addEventListener('error', function (e) {
+    var t = e.target;
+    if (t && t !== window && (t.src || t.href)) errs.push('Не се зареди: ' + String(t.src || t.href).split('/').pop());
+    else errs.push(String(e.message || 'Грешка') + (e.filename ? ' (' + String(e.filename).split('/').pop().split('?')[0] + ':' + e.lineno + ')' : ''));
+  }, true);
+  window.addEventListener('unhandledrejection', function (e) { errs.push('Грешка: ' + String(e.reason && e.reason.message || e.reason)); });
+  function fixAndReload(btn) {
+    if (btn) { btn.disabled = true; btn.textContent = 'Презареждам…'; }
+    var go = function () { location.reload(); };
+    try { if (window.caches) caches.keys().then(function (ks) { return Promise.all(ks.filter(function (k) { return k !== 'obhod-tiles'; }).map(function (k) { return caches.delete(k); })); }).then(go, go); else go(); } catch (x) { go(); }
+  }
+  window.addEventListener('load', function () {
+    setTimeout(function () {
+      if (window.__obhodStarted) return;
+      var box = document.createElement('div');
+      box.setAttribute('role', 'alert');
+      box.style.cssText = 'position:fixed;left:12px;right:12px;top:50%;transform:translateY(-50%);z-index:99999;background:#fff;color:#0c0c0c;border-radius:16px;padding:18px;box-shadow:0 10px 40px rgba(0,0,0,.35);font:500 15px/1.4 Montserrat,system-ui,sans-serif;max-width:460px;margin:0 auto';
+      box.innerHTML = '<div style="font-weight:800;font-size:18px;margin-bottom:6px">Приложението не тръгна</div>' +
+        '<div style="margin-bottom:10px">Натисни „Презареди“. Ако пак не тръгне, снимай този екран и го прати на Ники.</div>' +
+        '<div style="font:500 12px/1.35 monospace;color:#5c5f66;background:#f4f4f5;border-radius:10px;padding:8px;margin-bottom:12px;word-break:break-word;max-height:30vh;overflow:auto"></div>' +
+        '<button type="button" style="width:100%;min-height:52px;border:0;border-radius:12px;background:#E4101C;color:#fff;font:800 17px Montserrat,system-ui,sans-serif">Презареди</button>';
+      box.children[2].textContent = (errs.length ? errs.slice(-4).join('\n') : 'Без съобщение за грешка') + '\n' + navigator.userAgent;
+      box.children[2].style.whiteSpace = 'pre-wrap';
+      box.querySelector('button').addEventListener('click', function () { fixAndReload(this); });
+      document.body.appendChild(box);
+    }, 2500);
+  });
+  if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
+  var had = !!navigator.serviceWorker.controller, want = false;
+  navigator.serviceWorker.register('sw.js').then(function (reg) {
+    var check = function () { if (navigator.onLine !== false) reg.update().catch(function () {}); };
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') check(); });
+    setInterval(check, 10 * 60e3);
+  }).catch(function () {});
+  function tryReload() {
+    if (!want) return;
+    var busy = false; try { busy = !!(window.__obhodBusy && window.__obhodBusy()); } catch (x) {}
+    if (busy) { setTimeout(tryReload, 4000); return; }
+    want = false; location.reload();
+  }
+  navigator.serviceWorker.addEventListener('controllerchange', function () { if (!had) { had = true; return; } want = true; tryReload(); });
+})();
+</script>
 <script src="lib/leaflet/leaflet.js"></script>
 <script src="config.js"></script>
 <script src="data.js"></script>
