@@ -518,7 +518,9 @@
 
   // ---------- navigation apps ----------
   const IS_HUAWEI = /huawei|honor|harmonyos|hmscore/i.test(navigator.userAgent || '');
-  const addrQ = p => encodeURIComponent((p.addr || p.st) + ', София');
+  // точка без координати: навигацията търси адреса (в населеното място на точката; по подразбиране София)
+  const addrTxt = p => (p.addr || p.st) + ', ' + (p.town || 'София');
+  const addrQ = p => encodeURIComponent(addrTxt(p));
   const NAV_APPS = {
     google: { name: 'Google Maps', sub: 'Може маршрут през няколко точки', url: p => `https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=${p.ll ? p.lat + ',' + p.lon : addrQ(p)}` },
     waze: { name: 'Waze', sub: 'По една точка наведнъж', url: p => p.ll ? `https://waze.com/ul?ll=${p.lat},${p.lon}&navigate=yes` : `https://waze.com/ul?q=${addrQ(p)}&navigate=yes` },
@@ -529,12 +531,13 @@
   const navApp = () => NAV_APPS[S.navApp] ? S.navApp : null;
   const navUrl = p => NAV_APPS[navApp() || 'google'].url(p);
   function routeUrl(list) {
-    list = list.filter(p => p.ll);
+    list = list.filter(p => p.ll || p.town);
     if (!list.length) return null;
     if (navApp() && navApp() !== 'google') return navUrl(list[0]);
+    const where = p => p.ll ? p.lat + ',' + p.lon : addrTxt(p);
     const d = list[list.length - 1];
-    let u = `https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=${d.lat},${d.lon}`;
-    const w = list.slice(0, -1).map(p => `${p.lat},${p.lon}`).join('|');
+    let u = `https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=${encodeURIComponent(where(d))}`;
+    const w = list.slice(0, -1).map(where).join('|');
     if (w) u += '&waypoints=' + encodeURIComponent(w);
     return u;
   }
@@ -828,7 +831,7 @@
       mapEl.classList.add('navrot');
       const h0 = navHeading();
       const nxt = tnext ? tnext.p : (nearInfo ? nearInfo.p : null);
-      setBrg(h0 != null ? h0 : (nxt ? bearingTo(S.pos, nxt) : 0), false);
+      setBrg(h0 != null ? h0 : (nxt && at(nxt) ? bearingTo(S.pos, at(nxt)) : 0), false);
       if (map.getZoom() < 17) map.setZoom(17, { animate: false });
       navUpdate(true);
     } else {
@@ -886,10 +889,12 @@
   }
 
   // ---------- rendering ----------
+  // къде е точката за подредба „най-близо“: координатите ѝ, а за точка само с адрес – приблизително (центърът на селото)
+  const at = p => (p.ll ? p : p.near || null);
   function nearestRemaining() {
     if (!S.pos) return null;
     let best = null, bd = Infinity;
-    for (const p of cur().pts) { if (V.has(p.id) || !p.ll) continue; const d = distM(S.pos, p); if (d < bd) { bd = d; best = p; } }
+    for (const p of cur().pts) { if (V.has(p.id) || !at(p)) continue; const d = distM(S.pos, at(p)) + (p.ll ? 0 : 150); if (d < bd) { bd = d; best = p; } }
     return best ? { p: best, d: bd } : null;
   }
   // Маршрутът се избира от падащо меню; до името е колко точки остават (✓ – всички минати).
@@ -938,15 +943,15 @@
     renderDays(r);
     $('#resetBtn').disabled = !resetGroup().some(x => x.pts.some(p => V.has(p.id)));
     // route through next remaining points: nearest-first from my position, else by number
-    const left = r.ordered.filter(p => !V.has(p.id) && p.ll);
+    const left = r.ordered.filter(p => !V.has(p.id) && (p.ll || (r.kind !== 'turg' && p.town)));
     let seq = [];
     if (r.kind === 'turg') seq = left.slice(0, 4);
     else if (trkOn(r)) seq = trkUpcoming(chainOf(r), 4);
     else if (S.pos && left.length) {
       let here = S.pos; const pool = left.slice();
       while (seq.length < 4 && pool.length) {
-        let bi = 0, bd = Infinity; pool.forEach((p, i) => { const d = distM(here, p); if (d < bd) { bd = d; bi = i; } });
-        here = pool[bi]; seq.push(pool.splice(bi, 1)[0]);
+        let bi = 0, bd = Infinity; pool.forEach((p, i) => { const d = at(p) ? distM(here, at(p)) : 1e9 + i; if (d < bd) { bd = d; bi = i; } });
+        here = at(pool[bi]) || here; seq.push(pool.splice(bi, 1)[0]);
       }
     } else seq = left.slice(0, 4);
     S.routeSeq = seq;
@@ -1110,7 +1115,7 @@
       return;
     }
     if (S.sort === 'near' && S.pos) {
-      pts.slice().sort((a, b) => (a.ll ? distM(S.pos, a) : 1e12) - (b.ll ? distM(S.pos, b) : 1e12)).forEach(p => ul.append(rowEl(p, multi)));
+      pts.slice().sort((a, b) => (at(a) ? distM(S.pos, at(a)) : 1e12) - (at(b) ? distM(S.pos, at(b)) : 1e12)).forEach(p => ul.append(rowEl(p, multi)));
       return;
     }
     const grip = canDrag(r) && pts.length > 1;
