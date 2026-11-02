@@ -1266,6 +1266,7 @@
     refresh();
     if (id) {
       const p = ptById[id];
+      if (!fromList && $('#sheet').dataset.state === 'hidden') setSheet('peek');   // избрана точка от картата – показва описанието ѝ
       if (fromList) {
         if (S.follow) setFollow(false);
         if (window.innerWidth < 900) setSheet('peek');
@@ -1297,7 +1298,23 @@
     buildMarkers(); refresh();
     if (!noFit) fitTo(cur().pts.filter(p => !V.has(p.id)).length ? cur().pts.filter(p => !V.has(p.id)) : cur().pts);
   }
-  function setSheet(state) { $('#sheet').dataset.state = state; if (state !== 'full') $('#sheet').scrollTop = 0; $('#grab').setAttribute('aria-label', state === 'full' ? 'Скрий списъка' : 'Покажи списъка'); setTimeout(() => map.invalidateSize(), 260); }
+  // долният лист: 'peek' (картата на точката), 'full' (и списъкът), 'hidden' (само тънка лента – цялата карта се вижда)
+  function setSheet(state) {
+    if (state === 'hidden' && window.innerWidth >= 900) state = 'peek';
+    $('#sheet').dataset.state = state; if (state !== 'full') $('#sheet').scrollTop = 0;
+    $('#grab').setAttribute('aria-label', state === 'full' ? 'Скрий списъка' : (state === 'hidden' ? 'Покажи точките' : 'Покажи списъка'));
+    document.documentElement.classList.toggle('maponly', state === 'hidden');
+    setTimeout(() => map.invalidateSize(), 260);
+  }
+  // едно чукване по празно място на картата: цялата карта ↔ обратно (изчаква малко – двойното чукване е за приближаване)
+  let mapTapT = 0;
+  map.on('click', () => {
+    if (window.innerWidth >= 900) return;
+    clearTimeout(mapTapT);
+    mapTapT = setTimeout(() => { setSheet($('#sheet').dataset.state === 'hidden' ? 'peek' : 'hidden'); LS.set('obhod.tapHint', 1); }, 300);
+  });
+  map.on('dblclick zoomstart movestart', () => clearTimeout(mapTapT));
+  window.addEventListener('resize', () => { if (window.innerWidth >= 900 && $('#sheet').dataset.state === 'hidden') setSheet('peek'); });
 
   // navigation: ask once which app to use
   function openUrl(url) {
@@ -1358,7 +1375,23 @@
     else if (act === 'nariad') { narErr = false; loadNariad(true); renderSummary(); }
   });
   $('#routeSel').addEventListener('change', e => { setRoute(e.target.value); e.target.blur(); });
-  $('#grab').addEventListener('click', () => setSheet($('#sheet').dataset.state === 'full' ? 'peek' : 'full'));
+  // лентата горе на листа: чукване – отваря/затваря списъка; плъзгане нагоре/надолу – стъпка нагоре/надолу (скрито ↔ точката ↔ списъкът)
+  let grabY = null, grabSwiped = false;
+  const ORDER_ST = ['hidden', 'peek', 'full'];
+  $('#grab').addEventListener('pointerdown', e => { grabY = e.clientY; grabSwiped = false; });
+  $('#grab').addEventListener('pointerup', e => {
+    if (grabY == null) return;
+    const dy = e.clientY - grabY; grabY = null;
+    if (Math.abs(dy) < 28) return;
+    grabSwiped = true;
+    const i = ORDER_ST.indexOf($('#sheet').dataset.state);
+    setSheet(ORDER_ST[Math.max(0, Math.min(2, i + (dy < 0 ? 1 : -1)))]);
+  });
+  $('#grab').addEventListener('click', () => {
+    if (grabSwiped) { grabSwiped = false; return; }
+    const st = $('#sheet').dataset.state;
+    setSheet(st === 'hidden' ? 'peek' : (st === 'full' ? 'peek' : 'full'));
+  });
   $('#locBtn').addEventListener('click', () => {
     if (!S.pos) {
       toast(S.geoErr === 'denied' ? 'Няма достъп до местоположението. Разрешете го за този сайт от настройките на браузъра.' : 'Търся местоположението…');
@@ -1674,6 +1707,8 @@
   buildMarkers();
   refresh();
   window.__obhodStarted = true;
+  // веднъж: подсказка, че картата се отваря на цял екран с едно чукване
+  if (window.innerWidth < 900 && !LS.get('obhod.tapHint', 0)) setTimeout(() => { if (!LS.get('obhod.tapHint', 0)) { toast('Чукни веднъж по картата – отваря се на цял екран. Точките се връщат от лентата долу.'); LS.set('obhod.tapHint', 1); } }, 6000);
   setTimeout(() => { map.invalidateSize(); const left = cur().pts.filter(p => !V.has(p.id)); fitTo(left.length ? left : cur().pts); }, 60);
   window.addEventListener('resize', () => { if (S.nav) { navSize(true); navUpdate(true); } else map.invalidateSize(); });
   // долният лист е толкова висок, колкото е съдържанието му – картата се преоразмерява с него
