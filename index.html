@@ -7,6 +7,7 @@
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
 <script>try { var t = JSON.parse(localStorage.getItem('obhod.map') || localStorage.getItem('obhod.theme')); localStorage.removeItem('obhod.theme'); if (t === 'dark' || t === 'light') { document.documentElement.dataset.map = t; localStorage.setItem('obhod.map', JSON.stringify(t)); } } catch (e) {}</script>
+<script src="i18n.js"></script>
 <meta name="description" content="Контейнерни точки по маршрути: карта, местоположение и отметки „Минах“.">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/favicon-32.png" sizes="32x32">
@@ -85,6 +86,7 @@
       <ol class="list" id="list"></ol>
       <p class="navset">Навигация с: <b id="navName">не е избрано</b> <button type="button" class="link" data-act="navchange">Смени</button></p>
       <p class="navset" id="installRow" hidden>Приложението не е инсталирано. <button type="button" class="link" data-act="install">Инсталирай</button></p>
+      <p class="navset">Език / Language: <button type="button" class="link" data-lang>English</button></p>
       <p class="foot" id="trkFoot" hidden></p>
       <p class="foot">Отметките се записват в таблицата „Обход на точките – отметки“. Точките са по картите на Екобулпак.</p>
     </div>
@@ -93,7 +95,7 @@
 
 <div class="modal" id="whoModal" hidden>
   <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="whoTitle">
-    <h2 id="whoTitle">Кой кара днес?</h2>
+    <div class="whohd"><h2 id="whoTitle">Кой кара днес?</h2><button type="button" class="langbtn" data-lang>English</button></div>
     <p class="muted">Името се записва до всяка отметка. Избира се веднъж на този телефон.</p>
     <div class="names" id="names"></div>
     <form class="other" id="otherForm">

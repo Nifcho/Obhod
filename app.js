@@ -7,6 +7,7 @@
   const ROUTES = window.ROUTES || [];
   if (!ROUTES.length) throw new Error('Няма точки – файлът data.js не се зареди.');
   const $ = s => document.querySelector(s);
+  const TR = s => (window.I18N && I18N.tr ? I18N.tr(s) : s);   // текстът, както ще се покаже на избрания език
   const LS = {
     get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
@@ -906,7 +907,7 @@
     }
     ROUTES.forEach((r, i) => {
       const left = r.pts.filter(p => !V.has(p.id)).length;
-      const txt = r.name + (r.pts.length ? (left ? ' · ' + left : ' ✓') : '');
+      const txt = TR(r.name + (r.pts.length ? (left ? ' · ' + left : ' ✓') : ''));
       if (sel.options[i].textContent !== txt) sel.options[i].textContent = txt;
     });
     if (sel.value !== S.route) sel.value = S.route;

@@ -15,6 +15,7 @@
 <meta name="theme-color" content="#ffffff">
 <link rel="manifest" href="../manifest.webmanifest">
 <link rel="icon" href="../icons/favicon-32.png" sizes="32x32">
+<script src="../i18n.js"></script>
 <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Обход">
@@ -62,10 +63,12 @@ ol.steps b { font-weight: 800; }
 .skip { color: var(--muted); font-size: 15px; margin-top: auto; padding-top: 20px; }
 .skip a { color: var(--ink); font-weight: 700; }
 .note { font-size: 14.5px; color: var(--muted); }
+.langsw { position: absolute; top: max(16px, env(safe-area-inset-top)); right: 14px; border: 1px solid var(--line); background: #fff; color: var(--ink); border-radius: 999px; padding: 7px 14px; font: 700 14px "Montserrat", system-ui, sans-serif; cursor: pointer; }
 </style>
 </head>
 <body>
 <div class="bar"></div>
+<button type="button" class="langsw" data-lang>English</button>
 <main>
   <img class="logo" src="../icons/icon-512.png" alt="" width="116" height="116">
   <h1>Обход на точките</h1>
@@ -154,13 +157,15 @@ ol.steps b { font-weight: 800; }
   if (!inapp && ANDROID && /; wv\)/.test(UA)) inapp = 'приложението за съобщения';
   var IOS_SAFARI = IOS && /safari/i.test(UA) && !/crios|fxios|edgios|opios/i.test(UA) && !inapp;
   var here = location.href.split('#')[0].split('?')[0];
+  var EN = window.I18N && I18N.lang === 'en';
+  if (EN) { here += '?lang=en'; document.querySelectorAll('a[href="../"]').forEach(function (a) { a.href = '../?lang=en'; }); }
   var $ = function (id) { return document.getElementById(id); };
   var all = ['sWait', 'sPrompt', 'sManual', 'sInappAndroid', 'sSamsung', 'sIos', 'sInappIos', 'sDone', 'sHave'];
   var SAMSUNG = ANDROID && /SamsungBrowser/i.test(UA);
   function show(id) { all.forEach(function (x) { $(x).hidden = x !== id; }); }
 
   document.querySelectorAll('.chromeLink').forEach(function (a) {
-    a.href = 'intent://' + location.host + location.pathname + '#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=' + encodeURIComponent('https://play.google.com/store/apps/details?id=com.android.chrome') + ';end';
+    a.href = 'intent://' + location.host + location.pathname + (EN ? '?lang=en' : '') + '#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=' + encodeURIComponent('https://play.google.com/store/apps/details?id=com.android.chrome') + ';end';
   });
   document.querySelectorAll('.copy').forEach(function (box) {
     var inp = box.querySelector('input'), b = box.querySelector('button');
