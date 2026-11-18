@@ -54,6 +54,7 @@
     narq: LS.get('obhod.narq', []), narOld: false, pin: LS.get('obhod.pin', null),
     broken: new Map(Object.entries(LS.get('obhod.broken', {}))),
     drivers: LS.get('obhod.drivers', CFG.drivers || []),
+    driverInfo: LS.get('obhod.driverInfo', null),   // от листа „Шофьори“: език и маршрути на всеки шофьор
     navApp: LS.get('obhod.nav', ''), routeSeq: [], pendingNav: null,
     sel: null, lastSync: 0, syncErr: false, pos: null, geoErr: null, follow: false, buzzed: {}
   };
@@ -145,6 +146,7 @@
         S.server = new Map((res.visits || []).filter(v => ptById[v.pid] || isTg(v.pid)).map(v => [v.pid, { at: Number(v.at), by: v.by || '' }]));
         saveServer();
         if (res.drivers && res.drivers.length) { S.drivers = res.drivers; LS.set('obhod.drivers', S.drivers); }
+        if (res.driverInfo) { S.driverInfo = res.driverInfo; LS.set('obhod.driverInfo', S.driverInfo); applyAccess(); }
         if (Array.isArray(res.broken)) {
           S.broken = new Map(res.broken.map(b => [b.pid, b]));
           const o = {}; S.broken.forEach((v, k) => { o[k] = v; }); LS.set('obhod.broken', o);
@@ -901,13 +903,32 @@
     return best ? { p: best, d: bd } : null;
   }
   // Маршрутът се избира от падащо меню; до името е колко точки остават (✓ – всички минати).
+  // ---------- шофьорът: език и кои маршрути вижда (лист „Шофьори“; докато скриптът не ги дава – от config.js) ----------
+  function profileOf(name) {
+    const src = S.driverInfo || CFG.driverInfo || {}, k = normName(name);
+    for (const n in src) if (normName(n) === k) return src[n] || {};
+    return {};
+  }
+  // „Лозенец, Изгрев“ → маршрутите, в чието име е някое от тези (Изгрев → „Изгрев и Изток“); празно = всички
+  function allowedKeys() {
+    const toks = String((S.name && profileOf(S.name).routes) || '').split(/[,;\n]+/).map(normName).filter(Boolean);
+    if (!toks.length) return null;
+    const keys = ROUTES.filter(r => { const n = ' ' + normName(r.name) + ' '; return toks.some(t => n.includes(' ' + t + ' ') || r.key === t); }).map(r => r.key);
+    return keys.length ? new Set(keys) : null;
+  }
+  const visRoutes = () => { const a = allowedKeys(); return a ? ROUTES.filter(r => a.has(r.key)) : ROUTES; };
+  function applyAccess() {
+    const vis = visRoutes();
+    if (vis.some(r => r.key === S.route)) return;
+    if (started) setRoute(vis[0].key); else { S.route = vis[0].key; LS.set('obhod.route', S.route); }
+  }
   function renderRoutes() {
-    const sel = $('#routeSel');
-    if (sel.options.length !== ROUTES.length) {
+    const sel = $('#routeSel'), vis = visRoutes();
+    if (Array.from(sel.options).map(o => o.value).join() !== vis.map(r => r.key).join()) {
       sel.textContent = '';
-      for (const r of ROUTES) { const o = document.createElement('option'); o.value = r.key; sel.append(o); }
+      for (const r of vis) { const o = document.createElement('option'); o.value = r.key; sel.append(o); }
     }
-    ROUTES.forEach((r, i) => {
+    vis.forEach((r, i) => {
       const left = r.pts.filter(p => !V.has(p.id)).length;
       const txt = TR(r.name + (r.pts.length ? (left ? ' · ' + left : ' ✓') : ''));
       if (sel.options[i].textContent !== txt) sel.options[i].textContent = txt;
@@ -1445,23 +1466,60 @@
   $('#confirmAll').addEventListener('click', () => { $('#confirmModal').hidden = true; resetRoutes(resetGroup()); });
 
   // who
+  // всеки шофьор влиза с името си и ПИН (лист „Шофьори“, колона „ПИН“; по подразбиране 0000)
+  const WHO_BG = { lbl: 'Въведи ПИН кода си', ph: 'ПИН', go: 'Влез', back: 'Назад', check: 'Проверявам…', wrong: 'Грешен ПИН.', offline: 'Няма връзка с таблицата. Опитайте пак.' };
+  const WHO_EN = { lbl: 'Enter your PIN', ph: 'PIN', go: 'Sign in', back: 'Back', check: 'Checking…', wrong: 'Wrong PIN.', offline: 'No connection to the sheet. Try again.' };
+  let whoFor = null, W = WHO_BG;
+  function whoStep(name) {
+    whoFor = name || null;
+    $('#whoPick').hidden = !!name; $('#whoPinForm').hidden = !name; $('#whoPinMsg').hidden = true;
+    $('#whoTitle').textContent = name || 'Кой кара днес?';
+    if (!name) return;
+    // шофьор на английски (напр. Ahmad) – екранът за ПИН е на английски още преди да е влязъл
+    W = (window.I18N && I18N.lang === 'en') || profileOf(name).lang === 'en' ? WHO_EN : WHO_BG;
+    $('#whoPinLbl').textContent = W.lbl; $('#whoPinGo').textContent = W.go; $('#whoBack').textContent = W.back;
+    $('#whoPin').value = ''; $('#whoPin').placeholder = W.ph; $('#whoPin').setAttribute('aria-label', W.ph);
+    setTimeout(() => $('#whoPin').focus(), 50);
+  }
+  function whoMsg(t, neutral) { const m = $('#whoPinMsg'); m.textContent = t; m.hidden = false; m.classList.toggle('neutral', !!neutral); }
   function openWho() {
     const box = $('#names'); box.textContent = '';
     const list = (S.drivers && S.drivers.length ? S.drivers : (CFG.drivers || []));
     for (const n of list) {
       const b = el('button', null, n); b.type = 'button'; b.setAttribute('aria-pressed', String(n === S.name));
-      b.addEventListener('click', () => setName(n)); box.append(b);
+      b.addEventListener('click', () => { if (n === S.name) $('#whoModal').hidden = true; else if (!API) setName(n); else whoStep(n); });
+      box.append(b);
     }
-    $('#otherName').value = list.indexOf(S.name) < 0 ? S.name : '';
+    whoStep(null);
     $('#whoModal').hidden = false;
   }
+  $('#whoBack').addEventListener('click', () => whoStep(null));
+  $('#whoPinForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const n = whoFor, pin = $('#whoPin').value.trim();
+    if (!n || !pin) return;
+    const btn = $('#whoPinGo'); btn.disabled = true; whoMsg(W.check, true);
+    let res = null;
+    try { res = await fetchJSON(API, { method: 'POST', body: JSON.stringify({ ops: [], login: 1, name: n, pin }) }); } catch (err) {}
+    btn.disabled = false;
+    if (!res || !res.ok) { whoMsg(W.offline); return; }
+    if (res.driverInfo) { S.driverInfo = res.driverInfo; LS.set('obhod.driverInfo', S.driverInfo); }
+    // по-стар скрипт в таблицата не проверява ПИН – тогава важи кодът по подразбиране 0000
+    const ok = res.login ? res.login.ok : /^0+$/.test(pin);
+    if (!ok) { whoMsg(W.wrong); $('#whoPin').select(); return; }
+    setName((res.login && res.login.name) || n);
+  });
   function setName(n) {
     n = String(n || '').trim().slice(0, 60); if (!n) return;
-    S.name = n; LS.set('obhod.name', n); $('#whoModal').hidden = true; refresh();
+    S.name = n; LS.set('obhod.name', n); $('#whoModal').hidden = true; whoStep(null);
+    applyAccess();
+    // езикът на шофьора (Ahmad – английски, другите – български); сменя се и после от бутона за езика
+    const want = profileOf(n).lang === 'en' ? 'en' : 'bg';
+    if (window.I18N && I18N.lang !== want) { I18N.set(want); return; }
+    refresh();
     toast('Здравей, ' + n + '!');
   }
   $('#whoBtn').addEventListener('click', openWho);
-  $('#otherForm').addEventListener('submit', e => { e.preventDefault(); setName($('#otherName').value); });
   $('#whoModal').addEventListener('click', e => { if (e.target.id === 'whoModal' && S.name) $('#whoModal').hidden = true; });
   $('#confirmModal').addEventListener('click', e => { if (e.target.id === 'confirmModal') $('#confirmModal').hidden = true; });
 
@@ -1724,6 +1782,7 @@
     if (!NAR) NAR = builtinNariad();
     applyTurg();
   }
+  applyAccess();
   started = true;
   buildMarkers();
   refresh();

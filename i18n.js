@@ -220,6 +220,8 @@
     'Проверявам…': 'Checking…',
     'Скриптът в таблицата трябва да се обнови, за да работят ПИН кодовете.': 'The sheet script needs updating for PINs to work.',
     'Грешен ПИН.': 'Wrong PIN.',
+    'Въведи ПИН кода си': 'Enter your PIN',
+    'Назад': 'Back',
     'Обнови приложението': 'Refresh the app',
     'Обновявам…': 'Updating…',
     'Приложението е обновено.': 'The app is up to date.',

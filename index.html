@@ -96,11 +96,15 @@
 <div class="modal" id="whoModal" hidden>
   <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="whoTitle">
     <div class="whohd"><h2 id="whoTitle">Кой кара днес?</h2><button type="button" class="langbtn" data-lang>English</button></div>
-    <p class="muted">Името се записва до всяка отметка. Избира се веднъж на този телефон.</p>
-    <div class="names" id="names"></div>
-    <form class="other" id="otherForm">
-      <label for="otherName">Друго име</label>
-      <div class="row"><input id="otherName" autocomplete="name" placeholder="Име и фамилия"><button class="btn primary" type="submit">Запази</button></div>
+    <div id="whoPick">
+      <p class="muted">Името се записва до всяка отметка. Избира се веднъж на този телефон.</p>
+      <div class="names" id="names"></div>
+    </div>
+    <form class="other" id="whoPinForm" hidden>
+      <label for="whoPin" id="whoPinLbl">Въведи ПИН кода си</label>
+      <div class="row"><input id="whoPin" type="password" inputmode="numeric" autocomplete="off" maxlength="12" placeholder="ПИН" aria-label="ПИН"><button class="btn primary" type="submit" id="whoPinGo">Влез</button></div>
+      <p class="pinmsg" id="whoPinMsg" hidden></p>
+      <div class="row end"><button class="btn" type="button" id="whoBack">Назад</button></div>
     </form>
   </div>
 </div>

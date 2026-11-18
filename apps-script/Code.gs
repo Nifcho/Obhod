@@ -9,7 +9,9 @@
  * Листове:
  *   „Отметки“  – текущо минатите точки (по един ред на точка)
  *   „История“  – всяко действие: минах, върнах, нов курс
- *   „Шофьори“  – имената, които приложението предлага (може да се редактира)
+ *   „Шофьори“  – имената, които приложението предлага (може да се редактира), и до всяко име:
+ *                „ПИН“ – кодът за влизане (празно = 0000), „Език“ – English = приложението е на английски,
+ *                „Маршрути“ – кои маршрути вижда, разделени със запетая (празно = всички).
  *   „Търговски обекти“ – обектите с координати, адрес, телефон и бележка
  *   „Наряд …“  – по един лист на ден (напр. „Наряд Понеделник“): обектите в реда на обхода
  *   „Промени в наряда“ – какво е добавено/махнато от търговския наряд за конкретна дата (от приложението)
@@ -90,6 +92,9 @@ function handle_(p) {
         lock2.releaseLock();
       }
     }
+    // влизане на шофьор: име + ПИН от листа „Шофьори“
+    var drv = readDriverRows_(ss);
+    if (p.login) out.login = loginDriver_(drv, p.name, p.pin);
     // ПИН за промяна на търговския наряд (проверка от приложението)
     if (p.checkPin) { var who = pinOwner_(ss, p.pin); out.pin = { ok: !!who, who: who }; }
     // търговски наряд: добавени/махнати обекти за деня (само с ПИН) и бройките кофи по обект (всички)
@@ -119,7 +124,8 @@ function handle_(p) {
     }
     out.broken = readBroken_(ss);
     out.visits = readState_(ss);
-    out.drivers = readDrivers_(ss);
+    out.drivers = drv.map(function (d) { return d.name; });
+    out.driverInfo = driverInfo_(drv);
     if (!out.nariad && (p.action === 'nariad' || p.nariad)) out.nariad = readNariad_(ss);
     out.now = Date.now();
   } catch (err) {
@@ -238,13 +244,41 @@ function readState_(ss) {
   return out;
 }
 
-function readDrivers_(ss) {
+// „Шофьори“: колона A – името; колоните „ПИН“, „Език“ и „Маршрути“ се намират по заглавието си.
+function readDriverRows_(ss) {
   var sh = ss.getSheetByName(SHEET_DRIVERS);
-  var n = sh.getLastRow() - 1;
-  if (n < 1) return [];
-  return sh.getRange(2, 1, n, 1).getValues()
-    .map(function (r) { return String(r[0] || '').trim(); })
-    .filter(function (s) { return s; });
+  if (!sh || sh.getLastRow() < 2) return [];
+  var lc = Math.max(1, Math.min(sh.getLastColumn(), 10));
+  var v = sh.getRange(1, 1, sh.getLastRow(), lc).getDisplayValues();
+  var head = v[0].map(norm_);
+  var col = function (re) { for (var i = 1; i < head.length; i++) if (re.test(head[i])) return i; return -1; };
+  var cp = col(/пин|pin/), cl = col(/език|lang/), cr = col(/маршрут|route/);
+  var cell = function (r, c) { return c >= 0 ? String(v[r][c] || '').trim() : ''; };
+  var out = [];
+  for (var r = 1; r < v.length; r++) {
+    var name = String(v[r][0] || '').trim();
+    if (name) out.push({ name: name, pin: cell(r, cp), lang: cell(r, cl), routes: cell(r, cr) });
+  }
+  return out;
+}
+function readDrivers_(ss) { return readDriverRows_(ss).map(function (d) { return d.name; }); }
+var driverLang_ = function (s) { return /^(en|english|англ)/i.test(String(s || '').trim()) ? 'en' : 'bg'; };
+// без ПИН кодовете – те остават само в таблицата
+function driverInfo_(rows) {
+  var o = {};
+  rows.forEach(function (d) { o[d.name] = { lang: driverLang_(d.lang), routes: d.routes }; });
+  return o;
+}
+// празен ПИН = 0000; водещите нули не се броят (ако клетката е станала число)
+function loginDriver_(rows, name, pin) {
+  var digits = function (s) { s = String(s == null ? '' : s).trim(); return /^\d+$/.test(s) ? s.replace(/^0+(?=\d)/, '') : s; };
+  var nm = norm_(name);
+  for (var i = 0; i < rows.length; i++) {
+    if (norm_(rows[i].name) !== nm) continue;
+    if (digits(pin) !== digits(rows[i].pin || '0000')) return { ok: false };
+    return { ok: true, name: rows[i].name, lang: driverLang_(rows[i].lang), routes: rows[i].routes };
+  }
+  return { ok: false, unknown: true };
 }
 
 // Листовете с наряди и обектите – връщат се както се виждат в таблицата;

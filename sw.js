@@ -1,5 +1,5 @@
 // Офлайн кеш за приложението и прегледаните части от картата.
-const VERSION = 'obhod-v46';
+const VERSION = 'obhod-v47';
 const SHELL = [
   './', './index.html', './styles.css', './app.js', './i18n.js', './data.js', './config.js',
   './manifest.webmanifest', './lib/leaflet/leaflet.js', './lib/leaflet/leaflet.css',
