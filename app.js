@@ -36,11 +36,12 @@
     r.groups.forEach(g => r.pts.filter(p => p.grp === g).forEach(p => r.ordered.push(p)));
     for (const p of r.pts) {
       p.route = r.key; p.routeName = r.name; p.kind = r.kind || ''; p.ll = p.lat != null && p.lon != null;
-      p.shape = (p.grp === 'Изгрев' || p.grp === 'Изток 44–47') ? 'sq' : (p.grp === 'Лозенец 91–95' ? 'dm' : 'ci');
+      p.shape = (/^izg-/.test(p.id) || p.grp === 'Изток 44–47') ? 'sq' : 'ci';   // точките от жк. Изгрев – квадратчета, както на картата
       ptById[p.id] = p;
     }
   }
 
+  if (LS.get('obhod.route', '') === 'dianabad') LS.set('obhod.route', 'izgrev');   // Дианабад вече е част от наряд „Изгрев“
   const S = {
     route: byKey[LS.get('obhod.route', '')] ? LS.get('obhod.route', '') : (ROUTES[0] && ROUTES[0].key),
     filter: LS.get('obhod.filter', 'left'),
