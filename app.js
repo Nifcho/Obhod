@@ -1697,6 +1697,24 @@
     installTimer = setTimeout(() => maybeAskInstall(true), 4000);
   }
 
+  // ---------- логото горе вляво: обновява приложението (новата версия + свежи данни от таблицата) ----------
+  const appVersion = () => (window.caches ? caches.keys().then(ks => Math.max(0, ...ks.map(k => +((k.match(/^obhod-v(\d+)$/) || [])[1] || 0)))) : Promise.resolve(0)).catch(() => 0);
+  $('#brandBtn').addEventListener('click', async () => {
+    const b = $('#brandBtn'); if (b.classList.contains('spin')) return;
+    if (navigator.onLine === false) { toast('Няма интернет – опитай пак, когато има връзка.'); return; }
+    b.classList.add('spin'); toast('Обновявам…');
+    try {
+      const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
+      if (reg) {
+        await Promise.race([reg.update(), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 10000))]);
+        // има нова версия – изчакваме я да поеме, за да не се презарежда два пъти
+        if (reg.installing || reg.waiting) await new Promise(ok => { const t = setTimeout(ok, 8000); navigator.serviceWorker.addEventListener('controllerchange', () => { clearTimeout(t); ok(); }, { once: true }); });
+      }
+    } catch (e) { b.classList.remove('spin'); toast('Няма връзка – опитай пак, когато има интернет.'); return; }
+    try { sessionStorage.setItem('obhod.updated', String(Date.now())); } catch (e) {}
+    location.reload();
+  });
+
   // ---------- start ----------
   if (TURG) {
     const cached = LS.get('obhod.nariad', null);
@@ -1708,6 +1726,10 @@
   buildMarkers();
   refresh();
   window.__obhodStarted = true;
+  try {
+    const u = +sessionStorage.getItem('obhod.updated');
+    if (u) { sessionStorage.removeItem('obhod.updated'); if (Date.now() - u < 60000) appVersion().then(v => toast(v ? 'Приложението е обновено – версия ' + v + '.' : 'Приложението е обновено.')); }
+  } catch (e) {}
   // веднъж: подсказка, че картата се отваря на цял екран с едно чукване
   if (window.innerWidth < 900 && !LS.get('obhod.tapHint', 0)) setTimeout(() => { if (!LS.get('obhod.tapHint', 0)) { toast('Чукни веднъж по картата – отваря се на цял екран. Точките се връщат от лентата долу.'); LS.set('obhod.tapHint', 1); } }, 6000);
   setTimeout(() => { map.invalidateSize(); const left = cur().pts.filter(p => !V.has(p.id)); fitTo(left.length ? left : cur().pts); }, 60);

@@ -281,7 +281,11 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
 /* ---------- в стила на alara.bg ---------- */
 body { font-weight: 500; letter-spacing: -.005em; }
 .bar { background: var(--head); border-bottom-color: var(--head-line); padding-left: 10px; }
-.brand { flex: none; display: flex; align-items: center; }
+.brand { flex: none; display: flex; align-items: center; border: 0; background: none; padding: 6px; margin: -6px; border-radius: 10px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.brand:active svg { transform: scale(.88); }
+.brand svg { transition: transform .12s; }
+.brand.spin svg { animation: brandspin .9s linear infinite; }
+@keyframes brandspin { to { transform: rotate(360deg); } }
 .brand svg { width: 34px; height: 29.5px; fill: var(--red); stroke: none; }
 .routesel select { background: var(--sel-bg); color: var(--sel-ink); border: 1px solid var(--sel-line); border-radius: 14px; font: 700 16.5px var(--f-body); letter-spacing: -.01em; padding-left: 14px; }
 .routesel svg { stroke: var(--red); stroke-width: 2.6; }

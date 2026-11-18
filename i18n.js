@@ -220,6 +220,11 @@
     'Проверявам…': 'Checking…',
     'Скриптът в таблицата трябва да се обнови, за да работят ПИН кодовете.': 'The sheet script needs updating for PINs to work.',
     'Грешен ПИН.': 'Wrong PIN.',
+    'Обнови приложението': 'Refresh the app',
+    'Обновявам…': 'Updating…',
+    'Приложението е обновено.': 'The app is up to date.',
+    'Няма интернет – опитай пак, когато има връзка.': 'No internet – try again when you have a connection.',
+    'Няма връзка – опитай пак, когато има интернет.': 'No connection – try again when you have internet.',
     'ПИН кодът не е валиден – промените в наряда не са записани.': 'The PIN is not valid – schedule changes were not saved.',
     'Таблицата не отговаря. Опитайте пак.': 'The sheet is not responding. Try again.',
     'Няма връзка с таблицата. Опитайте пак.': 'No connection to the sheet. Try again.',
@@ -396,6 +401,7 @@
     [/^добавя се за (.+) и в списъка с обекти \(по заявка\)$/, function (m) { return 'added for ' + m[1] + ' and to the site list (on request)'; }],
     [/^Влязохте като (.+) – може да променяте наряда\.$/, function (m) { return 'Signed in as ' + m[1] + ' – you can edit the schedule.'; }],
     [/^(.+): (\d+ (?:синя|сини|жълта|жълти)(?: \+ \d+ (?:жълта|жълти))?|без кофи)\.$/, function (m) { return m[1] + ': ' + cont(m[2]) + '.'; }],
+    [/^Приложението е обновено – версия (\d+)\.$/, function (m) { return 'The app is up to date – version ' + m[1] + '.'; }],
     [/^Не се зареди: (.+)$/, function (m) { return 'Did not load: ' + m[1]; }],
     [/^Грешка: (.+)$/, function (m) { return 'Error: ' + m[1]; }]
   ];
