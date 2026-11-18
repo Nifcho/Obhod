@@ -36,7 +36,8 @@
     r.groups.forEach(g => r.pts.filter(p => p.grp === g).forEach(p => r.ordered.push(p)));
     for (const p of r.pts) {
       p.route = r.key; p.routeName = r.name; p.kind = r.kind || ''; p.ll = p.lat != null && p.lon != null;
-      p.shape = (/^izg-/.test(p.id) || p.grp === 'Изток 44–47') ? 'sq' : 'ci';   // точките от жк. Изгрев – квадратчета, както на картата
+      // жк. Изгрев – квадратчета (както на картата); Изток – ромбчета, за да не се бъркат с Изгрев (номерата се повтарят)
+      p.shape = /^izg-/.test(p.id) ? 'sq' : (/^izt-/.test(p.id) ? 'dm' : 'ci');
       ptById[p.id] = p;
     }
   }

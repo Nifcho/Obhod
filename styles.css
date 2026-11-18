@@ -111,6 +111,9 @@ svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; 
 .pin.sq { border-radius: 7px; }
 .pin.dm { border-radius: 4px; transform: rotate(45deg) scale(.86); }
 .pin.dm span { transform: rotate(-45deg); }
+.pin.dm.n5 { width: 32px; font-size: 9.5px; letter-spacing: -.04em; }
+.zmid .pin.dm.n5 { width: 26px; font-size: 8px; }
+.zlow .pin.dm.n5 { width: 20px; font-size: 6.5px; }
 .pin { position: relative; }
 .pin.brk::after { content: "!"; position: absolute; top: -7px; right: -7px; width: 17px; height: 17px; border-radius: 50%; background: var(--danger); color: #fff; border: 2px solid var(--surface); font: 700 11px/13px var(--f-body); text-align: center; }
 .pin.done { background: var(--done-fill); color: var(--done-ink); box-shadow: none; }
