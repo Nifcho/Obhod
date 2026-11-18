@@ -41,7 +41,7 @@
     }
   }
 
-  if (LS.get('obhod.route', '') === 'dianabad') LS.set('obhod.route', 'izgrev');   // Дианабад вече е част от наряд „Изгрев“
+  if (['dianabad', 'izgrev', 'iztok'].includes(LS.get('obhod.route', ''))) LS.set('obhod.route', 'izgrev-iztok');   // Дианабад, Изгрев и Изток вече са един наряд
   const S = {
     route: byKey[LS.get('obhod.route', '')] ? LS.get('obhod.route', '') : (ROUTES[0] && ROUTES[0].key),
     filter: LS.get('obhod.filter', 'left'),

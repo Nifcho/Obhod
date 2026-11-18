@@ -299,7 +299,7 @@
     'Пн': 'Mon', 'Вт': 'Tue', 'Ср': 'Wed', 'Чт': 'Thu', 'Пт': 'Fri', 'Сб': 'Sat', 'Нд': 'Sun'
   };
   var DAYS = { 'понеделник': 'Monday', 'вторник': 'Tuesday', 'сряда': 'Wednesday', 'четвъртък': 'Thursday', 'петък': 'Friday', 'събота': 'Saturday', 'неделя': 'Sunday' };
-  var ROUTE = { 'Банкя': 'Bankya', 'Лозенец': 'Lozenets', 'Дианабад': 'Dianabad', 'Изток': 'Iztok', 'Изгрев': 'Izgrev', 'Красно село': 'Krasno Selo', 'Оборище': 'Oborishte', 'Търговски': 'Commercial' };
+  var ROUTE = { 'Банкя': 'Bankya', 'Лозенец': 'Lozenets', 'Дианабад': 'Dianabad', 'Изток': 'Iztok', 'Изгрев': 'Izgrev', 'Изгрев и Изток': 'Izgrev and Iztok', 'Красно село': 'Krasno Selo', 'Оборище': 'Oborishte', 'Търговски': 'Commercial' };
   var BIN = { 'жълта': 'yellow', 'зелена': 'green', 'синя': 'blue', 'друга': 'other' };
 
   // ---------- имена на места: на латиница (официалната транслитерация) ----------
