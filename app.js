@@ -1078,7 +1078,8 @@
     const bk = brokenOf(p.id);
     if (bk) {
       const w = el('div', 'brkinfo'); w.innerHTML = ICON.warn + '<span></span>';
-      w.lastChild.textContent = 'Счупена кофа' + (bk.kind ? ': ' + bk.kind : '') + ' · ' + (bk.pending ? 'изпраща се…' : (bk.by ? bk.by + ', ' : '') + fmtWhen(bk.at)) + (bk.note ? ' – ' + bk.note : '');
+      w.lastChild.textContent = 'Счупена кофа' + (bk.kind ? ': ' + bk.kind : '') + ' · ' + (bk.pending ? 'изпраща се…' : (bk.by ? bk.by + ', ' : '') + fmtWhen(bk.at));
+      if (bk.note) w.lastChild.append(' – ', el('span', 'ut', bk.note));   // бележката на шофьора – отделно, за да се преведе
       card.append(w);
     }
     const acts = el('div', 'acts');

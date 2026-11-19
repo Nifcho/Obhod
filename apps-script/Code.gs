@@ -17,6 +17,8 @@
  *   „Промени в наряда“ – какво е добавено/махнато от търговския наряд за конкретна дата (от приложението)
  *                Наряда може да променя само човек с ПИН от лист „Настройки“ (редове „ПИН Ники“, „ПИН Тошко“ …,
  *                колона B – кодът). Нов човек = нов ред „ПИН Име“; изтрит ред = край на достъпа.
+ *   „Преводи“  – английските преводи на бележките и етикетите (за шофьорите на английски); правят се сами
+ *                с Google Translate, а грешен превод се поправя в колона „English“.
  *   „Счупени“  – сигнали за счупени кофи от шофьорите; за всеки идва имейл (адресът е в лист „Настройки“).
  *                Когато кофата е оправена, напишете „Оправено“ в колона „Статус“ – маха се от приложението.
  *
@@ -35,6 +37,7 @@ var NARIAD_PREFIX = 'Наряд';
 var SHEET_BROKEN = 'Счупени';
 var SHEET_SETTINGS = 'Настройки';
 var SHEET_CHANGES = 'Промени в наряда';
+var SHEET_TR = 'Преводи';
 var CHANGES_HEAD = ['Дата', 'Обект', 'Промяна', 'Шофьор', 'Час', 'Ширина', 'Дължина', 'Код'];
 // Кой получава известията за счупени кофи: адресът от листа „Настройки“ (ред „Известия…“, колона B,
 // може няколко, разделени със запетая). Ако там е празно – този адрес, а ако и той е празен – собственикът.
@@ -92,6 +95,10 @@ function handle_(p) {
         lock2.releaseLock();
       }
     }
+    // превод на английски за бележки и етикети (лист „Преводи“, иначе Google Translate)
+    var trList = p.tr;
+    if (typeof trList === 'string') { try { trList = JSON.parse(trList); } catch (err) { trList = null; } }
+    if (trList && trList.length) out.tr = translate_(ss, trList);
     // влизане на шофьор: име + ПИН от листа „Шофьори“
     var drv = readDriverRows_(ss);
     if (p.login) out.login = loginDriver_(drv, p.name, p.pin);
@@ -540,4 +547,40 @@ function probaIzvestie() {
   var ss = SpreadsheetApp.getActive();
   ensureSheets_(ss);
   MailApp.sendEmail({ to: notifyTo_(), subject: 'Проба: известия за счупени кофи', body: 'Известията от „Обход на точките“ работят. Ще идват на този адрес: ' + notifyTo_(), name: 'Обход на точките' });
+}
+
+// Преводите се пазят в лист „Преводи“ (Български | English) – ако някой е грешен, поправете го там.
+function translate_(ss, list) {
+  var out = {};
+  var sh = ss.getSheetByName(SHEET_TR);
+  if (!sh) {
+    sh = ss.insertSheet(SHEET_TR);
+    sh.getRange(1, 1, 1, 2).setValues([['Български', 'English']]).setFontWeight('bold');
+    sh.setFrozenRows(1); sh.setColumnWidth(1, 420); sh.setColumnWidth(2, 420);
+  }
+  var known = {}, lr = sh.getLastRow();
+  if (lr > 1) sh.getRange(2, 1, lr - 1, 2).getValues().forEach(function (r) {
+    var k = String(r[0] || '').trim(); if (k && String(r[1] || '').trim()) known[k] = String(r[1]).trim();
+  });
+  var add = [];
+  for (var i = 0; i < list.length && i < 40; i++) {
+    var s = String(list[i] == null ? '' : list[i]).trim().slice(0, 500);
+    if (!s || out[s]) continue;
+    if (known[s]) { out[s] = known[s]; continue; }
+    try {
+      var t = LanguageApp.translate(s, 'bg', 'en');
+      if (t) { out[s] = t; known[s] = t; add.push([s, t]); }
+    } catch (err) {}
+  }
+  if (add.length) {
+    var lock = LockService.getScriptLock();
+    lock.waitLock(20000);
+    try { sh.getRange(sh.getLastRow() + 1, 1, add.length, 2).setValues(add); } finally { lock.releaseLock(); }
+  }
+  return out;
+}
+
+// Проба на превода: изберете „probaPrevod“ горе и натиснете ▶ „Изпълни“ (при първия път разрешете достъпа).
+function probaPrevod() {
+  Logger.log(LanguageApp.translate('Звъни се преди обслужване.', 'bg', 'en'));
 }

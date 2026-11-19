@@ -27,6 +27,9 @@
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', langBtns); else langBtns();
   if (lang !== 'en') return;
+  // готовите преводи на данните (бележки, обекти) – само на английски
+  var me = document.currentScript && document.currentScript.src;
+  if (me && !window.EN_DATA && document.readyState === 'loading') document.write('<script src="' + me.replace(/i18n\.js(\?.*)?$/, 'en-data.js') + '"><\/script>');
 
   // ---------- речник ----------
   var D = {
@@ -53,7 +56,7 @@
     'Приложението не е инсталирано.': 'The app is not installed.',
     'Инсталирай': 'Install',
     'Език / Language:': 'Language:',
-    'Отметките се записват в таблицата „Обход на точките – отметки“. Точките са по картите на Екобулпак.': 'Check-offs are saved to the sheet “Обход на точките – отметки”. The points follow Ecobulpack’s maps.',
+    'Отметките се записват в таблицата „Обход на точките – отметки“. Точките са по картите на Екобулпак.': 'Check-offs are saved to the shared Google Sheet. The points follow Ecobulpack’s maps.',
     'Кой кара днес?': 'Who is driving today?',
     'Името се записва до всяка отметка. Избира се веднъж на този телефон.': 'Your name is saved with every check-off. You choose it once on this phone.',
     'Друго име': 'Other name',
@@ -304,14 +307,63 @@
   var ROUTE = { 'Банкя': 'Bankya', 'Лозенец': 'Lozenets', 'Дианабад': 'Dianabad', 'Изток': 'Iztok', 'Изгрев': 'Izgrev', 'Изгрев и Изток': 'Izgrev and Iztok', 'Красно село': 'Krasno Selo', 'Оборище': 'Oborishte', 'Търговски': 'Commercial' };
   var BIN = { 'жълта': 'yellow', 'зелена': 'green', 'синя': 'blue', 'друга': 'other' };
 
-  // ---------- имена на места: на латиница (официалната транслитерация) ----------
-  var TL = { 'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'sht', 'ъ': 'a', 'ь': 'y', 'ю': 'yu', 'я': 'ya' };
+  // ---------- латиница: имена на улици, обекти и хора ----------
+  // официалната транслитерация; видът на улицата – на английски и след името („ул. Преслав“ → „Preslav St.“)
+  var CY = '\u0400-\u04FF';
+  var TL = { 'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'sht', 'ъ': 'a', 'ь': 'y', 'ю': 'yu', 'я': 'ya', 'ѝ': 'i', 'ё': 'yo', 'ы': 'y', 'э': 'e', 'і': 'i', 'ї': 'yi', 'є': 'ye', 'ґ': 'g' };
+  var CYRUN = new RegExp('[' + CY + ']+', 'g'), CY1 = new RegExp('[' + CY + ']', 'g');
   function translit(s) {
-    return String(s).replace(/ия(?=$|[^а-яА-Я])/g, 'ia').replace(/[а-яА-Я]/g, function (c) {
-      var l = c.toLowerCase(), t = TL[l]; if (t == null) return c;
-      return c === l ? t : t.charAt(0).toUpperCase() + t.slice(1);
+    return String(s).replace(CYRUN, function (w) {
+      var caps = w.length > 1 && w === w.toUpperCase();
+      var t = w.replace(/ия$/, 'ia').replace(/ИЯ$/, 'IA').replace(CY1, function (c) {
+        var l = c.toLowerCase(), m = TL[l]; if (m == null) return c;
+        return c === l ? m : m.charAt(0).toUpperCase() + m.slice(1);
+      });
+      return caps ? t.toUpperCase() : t;
     });
   }
+  // марки и думи с утвърдено име на латиница (цели думи)
+  var WORDS = [
+    ['Кока Кола', 'Coca-Cola'], ['Макдоналдс', "McDonald's"], ['ОМВ', 'OMV'], ['Шел', 'Shell'], ['КФС', 'KFC'], ['Технополис', 'Technopolis'],
+    ['Джъмбо', 'Jumbo'], ['Декатлон', 'Decathlon'], ['Лидл', 'Lidl'], ['Кауфланд', 'Kaufland'], ['Билла', 'Billa'], ['Фантастико', 'Fantastico'],
+    ['Лукойл', 'Lukoil'], ['Бизнес парк', 'Business Park'], ['Бизнес Парк', 'Business Park'], ['Бизнес център', 'Business Centre'], ['Бизнес Център', 'Business Centre'],
+    ['Софийска вода', 'Sofiyska Voda'], ['Софийска Вода', 'Sofiyska Voda'], ['Хотел', 'Hotel'], ['Пекарна', 'Bakery'], ['Мол', 'Mall'],
+    ['Д-р', 'Dr.'], ['д-р', 'Dr.'], ['Акад.', 'Acad.'], ['Академик', 'Academician'], ['Арх.', 'Arch.'], ['Проф.', 'Prof.'], ['Ген.', 'Gen.'], ['Кап.', 'Capt.'],
+    ['вх.', 'entr.'], ['ет.', 'fl.'], ['инв.', 'inv.']
+  ];
+  var esc = function (s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); };
+  var WRE = WORDS.map(function (w) { return [new RegExp('(^|[^' + CY + '])' + esc(w[0]) + '(?=[^' + CY + ']|$)', 'g'), w[1]]; });
+  function words(s) { for (var i = 0; i < WRE.length; i++) s = s.replace(WRE[i][0], '$1' + WRE[i][1]); return s.replace(/№\s*/g, 'No. '); }
+  var KIND = [
+    [/^(?:ул\.?|улица)\s+/i, ' St.'], [/^(?:бул\.?|булевард)\s+/i, ' Blvd.'], [/^(?:пл\.?|площад)\s+/i, ' Sq.'],
+    [/^(?:ж\.?\s?к\.?)\s+/i, ' estate'], [/^(?:кв\.?|квартал)\s+/i, ' quarter'], [/^(?:с\.|село)\s+/i, ' village'],
+    [/^(?:гр\.|град)\s+/i, ''], [/^(?:м\.|местност)\s+/i, ' area']
+  ];
+  var KN = { 'ул': 'St.', 'бул': 'Blvd.', 'пл': 'Sq.' };
+  var INNER = new RegExp('(^|[\\s(])(ул|бул|пл)\\.\\s*([\u0410-\u042F][^,–—()/\\d]*?)(?=\\s*(?:[,–—()/]|\\d|$))', 'g');
+  function quotes(s) { return s.replace(/[„”]/g, '“').replace(/“([^“]*)“/g, '“$1”'); }
+  function latin1(core, plain) {
+    if (!plain) for (var i = 0; i < KIND.length; i++) {
+      var k = KIND[i][0].exec(core);
+      if (!k) continue;
+      var rest = core.slice(k[0].length), name, tail;
+      var q = /^[„"”“«]\s*([^„"”“»]+?)\s*[“"”»]\s*(.*)$/.exec(rest);
+      if (q) { name = q[1]; tail = q[2] ? (/^[,.;:]/.test(q[2]) ? q[2] : ' ' + q[2]) : ''; }
+      else { var t = /^(.+?)(\s+(?:№\s*)?\d.*|\s*[,–—-]\s.*)?$/.exec(rest); name = t[1]; tail = t[2] || ''; }
+      tail = tail.replace(/^\s*№\s*/, ' ');
+      return translit(words(name) + KIND[i][1] + words(quotes(tail))).replace(/\s{2,}/g, ' ');
+    }
+    if (!plain) core = core.replace(INNER, function (_, pre, k, name) { return pre + name + ' ' + KN[k]; });
+    return translit(words(quotes(core)));
+  }
+  // всичко, което е останало на кирилица → латиница (plain – без разместване на „ул.“, за свободен текст)
+  function latin(s, plain) {
+    var m = /^(\s*)([\s\S]*?)(\s*)$/.exec(String(s));
+    return m[1] + m[2].split(' / ').map(function (x) { return latin1(x, plain); }).join(' / ') + m[3];
+  }
+  // имена от данните: готовият превод (en-data.js) или латиница
+  var dn = function (s) { var E = window.EN_DATA; return (E && E.hasOwnProperty(s)) ? E[s] : latin(s); };
+  I.latin = latin;
   var GR = null;
   function groups() {
     if (GR) return GR;
@@ -325,8 +377,8 @@
     var m;
     if ((m = /^Карта (\d+) – Булекосервиз$/.exec(s))) return 'Map ' + m[1] + ' – Bulekoservis';
     if ((m = /^Карта (\d+)$/.exec(s))) return 'Map ' + m[1];
-    if ((m = /^Пълни зелени – (.+)$/.exec(s))) return 'Full green – ' + translit(m[1]);
-    if (groups().hasOwnProperty(s)) return translit(s);
+    if ((m = /^Пълни зелени – (.+)$/.exec(s))) return 'Full green – ' + latin(m[1]);
+    if (groups().hasOwnProperty(s)) return latin(s);
     return null;
   }
   var pl = function (s) { return place(s) || s; };
@@ -350,8 +402,8 @@
     [/^(.+) ✓$/, function (m) { var p = place(m[1]); return p ? p + ' ✓' : null; }],
     [/^Няма връзка – (\d+) (?:отметка чака|отметки чакат)$/, function (m) { return 'No connection – ' + m[1] + (+m[1] === 1 ? ' check-off' : ' check-offs') + ' waiting'; }],
     [/^Маршрут: следващите (\d+)$/, function (m) { return 'Route: next ' + m[1]; }],
-    [/^Навигация до т(?:\.|очка) (.+)$/, function (m) { return 'Navigate to point ' + m[1]; }],
-    [/^Навигация до (.+)$/, function (m) { return 'Navigate to ' + m[1]; }],
+    [/^Навигация до т(?:\.|очка) (.+)$/, function (m) { return 'Navigate to point ' + translit(m[1]); }],
+    [/^Навигация до (.+)$/, function (m) { return 'Navigate to ' + dn(m[1]); }],
     [/^Навигация с (.+)\.$/, function (m) { return 'Navigating with ' + m[1] + '.'; }],
     [/^(\d+) обекта?$/, function (m) { return sites(m[1]); }],
     [/^Наряд (\S+)$/, function (m) { return day(m[1]); }],
@@ -367,8 +419,8 @@
     [/^Към (.+)$/, function (m) { return 'To ' + pl(m[1]); }],
     [/^→ (.+) (\S+)$/, function (m) { return '→ ' + pl(m[1]) + ' ' + m[2]; }],
     [/^(.+) (\S+) →$/, function (m) { return pl(m[1]) + ' ' + m[2] + ' →'; }],
-    [/^Върни точка (.+)$/, function (m) { return 'Undo point ' + m[1]; }],
-    [/^Минах точка (.+)$/, function (m) { return 'Mark point ' + m[1] + ' done'; }],
+    [/^Върни точка (.+)$/, function (m) { return 'Undo point ' + translit(m[1]); }],
+    [/^Минах точка (.+)$/, function (m) { return 'Mark point ' + translit(m[1]) + ' done'; }],
     [/^Остават (\d+)$/, function (m) { return 'Left ' + m[1]; }],
     [/^Всички (\d+)$/, function (m) { return 'All ' + m[1]; }],
     [/^Минати (\d+)$/, function (m) { return 'Done ' + m[1]; }],
@@ -376,8 +428,8 @@
     [/^За (?:всеки|всяка) (\S+)$/, function (m) { return 'For ' + every(m[1]); }],
     [/^Редът е запазен за (?:всеки|всяка) (\S+)\.$/, function (m) { return 'Order saved for ' + every(m[1]) + '.'; }],
     [/^Редът за (\S+) е върнат по наряда\.$/, function (m) { return 'Order for ' + m[1] + ' reset to the schedule.'; }],
-    [/^(.+) е № (\S+) за (\S+)\.$/, function (m) { return m[1] + ' is No. ' + m[2] + ' for ' + m[3] + '.'; }],
-    [/^(.+) за (\d\d\.\d\d)\.$/, function (m) { return m[1] + ' for ' + m[2] + '.'; }],
+    [/^(.+) е № (\S+) за (\S+)\.$/, function (m) { return dn(m[1]) + ' is No. ' + m[2] + ' for ' + m[3] + '.'; }],
+    [/^(.+) за (\d\d\.\d\d)\.$/, function (m) { return dn(m[1]) + ' for ' + m[2] + '.'; }],
     [/^Линията на картата е приблизителният маршрут по (.+?)\.(?: (.+) се карат заедно – когато следващата точка е в другия наряд, приложението те прехвърля там\.)? Линията се скрива с бутона вдясно на картата\.$/, function (m) {
       return 'The line on the map is the approximate route from ' + m[1].replace(/^GPS запис/, 'a GPS recording of') + '.' +
         (m[2] ? ' ' + names(m[2]) + ' are driven together – when the next point is on the other route, the app switches you there.' : '') +
@@ -394,23 +446,27 @@
     }],
     [/^Само (.+)$/, function (m) { return 'Only ' + pl(m[1]); }],
     [/^Здравей, (.+)!$/, function (m) { return 'Hi, ' + m[1] + '!'; }],
-    [/^т\. (\S+)(?: – (.+))?$/, function (m) { return 'point ' + m[1] + (m[2] ? ' – ' + m[2] : ''); }],
+    [/^т\. (\S+)(?: – (.+))?$/, function (m) { return 'point ' + translit(m[1]) + (m[2] ? ' – ' + dn(m[2]) : ''); }],
     [/^(\d+) обекта?\. Промените са само за тази дата и ги виждат всички шофьори\.$/, function (m) { return sites(m[1]) + '. Changes apply to this date only and all drivers see them.'; }],
     [/^Променя: (.+)$/, function (m) { return 'Editing: ' + m[1]; }],
     [/^Добави за (.+)$/, function (m) { return 'Add for ' + m[1]; }],
     [/^По заявка за (\S+)$/, function (m) { return 'On request for ' + dy(m[1]); }],
-    [/^Нов обект: „(.+)“$/, function (m) { return 'New site: “' + m[1] + '”'; }],
+    [/^Нов обект: „(.+)“$/, function (m) { return 'New site: “' + dn(m[1]) + '”'; }],
     [/^добавя се за (.+) и в списъка с обекти \(по заявка\)$/, function (m) { return 'added for ' + m[1] + ' and to the site list (on request)'; }],
     [/^Влязохте като (.+) – може да променяте наряда\.$/, function (m) { return 'Signed in as ' + m[1] + ' – you can edit the schedule.'; }],
-    [/^(.+): (\d+ (?:синя|сини|жълта|жълти)(?: \+ \d+ (?:жълта|жълти))?|без кофи)\.$/, function (m) { return m[1] + ': ' + cont(m[2]) + '.'; }],
+    [/^(.+): (\d+ (?:синя|сини|жълта|жълти)(?: \+ \d+ (?:жълта|жълти))?|без кофи)\.$/, function (m) { return dn(m[1]) + ': ' + cont(m[2]) + '.'; }],
     [/^Приложението е обновено – версия (\d+)\.$/, function (m) { return 'The app is up to date – version ' + m[1] + '.'; }],
     [/^Не се зареди: (.+)$/, function (m) { return 'Did not load: ' + m[1]; }],
-    [/^Грешка: (.+)$/, function (m) { return 'Error: ' + m[1]; }]
+    [/^Грешка: (.+)$/, function (m) { return 'Error: ' + m[1]; }],
+    [/^Номер във файла: (.+)\.$/, function (m) { return 'File number: ' + m[1] + '.'; }],
+    [/^Във файла има две точки с № (\S+) на различни места\.$/, function (m) { return 'The file has two points No. ' + m[1] + ' in different places.'; }],
+    [/^(\d+)\. (.+)$/, function (m) { return m[1] + '. ' + dn(m[2]); }]
   ];
 
-  var CYR = /[А-Яа-яЁё]/;
+  var CYR = /[Ѐ-ӿ]/;
   function tr0(s) {
     if (D.hasOwnProperty(s)) return D[s];
+    var E = window.EN_DATA; if (E && E.hasOwnProperty(s)) return E[s];
     var r = place(s); if (r) return r;
     r = day(s); if (r) return r;
     var parts, ch, i;
@@ -438,22 +494,72 @@
     cache[s] = r;
     return r;
   }
-  I.tr = function (s) { var r = tr(s); return r == null ? s : r; };
+
+  // ---------- свободен текст (бележки, етикети, сигнали) – машинен превод през таблицата ----------
+  // Скриптът в таблицата превежда с Google Translate и пази преводите в лист „Преводи“ (там може да се поправят).
+  var MTK = 'obhod.mt', MT = {};
+  try { MT = JSON.parse(localStorage.getItem(MTK)) || {}; } catch (e) {}
+  var mtQ = {}, mtT = 0, mtOff = false, mtBusy = false;
+  function mtAsk(s) {
+    if (mtOff || MT.hasOwnProperty(s) || mtQ[s] || s.length > 500) return;
+    mtQ[s] = 1; clearTimeout(mtT); mtT = setTimeout(mtSend, 1200);
+  }
+  function mtSend() {
+    var api = window.OBHOD_CONFIG && window.OBHOD_CONFIG.apiUrl, list = Object.keys(mtQ).slice(0, 40);
+    if (!api || !list.length || mtBusy) return;
+    mtBusy = true;
+    list.forEach(function (k) { delete mtQ[k]; });
+    fetch(api, { method: 'POST', body: JSON.stringify({ ops: [], tr: list }), redirect: 'follow', cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (!res || !res.ok) return;
+        if (!res.tr) { mtOff = true; return; }   // скриптът в таблицата още не превежда – остава латиница
+        var got = false;
+        for (var k in res.tr) if (res.tr[k]) { MT[k] = String(res.tr[k]); got = true; }
+        if (!got) return;
+        var ks = Object.keys(MT); if (ks.length > 1500) ks.slice(0, ks.length - 1500).forEach(function (k) { delete MT[k]; });
+        try { localStorage.setItem(MTK, JSON.stringify(MT)); } catch (e) {}
+        fcache = {}; again();
+      })
+      .catch(function () {})
+      .then(function () { mtBusy = false; if (Object.keys(mtQ).length) mtT = setTimeout(mtSend, 400); });
+  }
+  I.mt = function () { return MT; };
+
+  // окончателният текст: речник/шаблони → машинен превод (за свободния текст) → латиница за каквото е останало
+  var fcache = {}, fsize = 0;
+  function fin(v, free) {
+    if (!v || !CYR.test(v)) return null;
+    var key = (free ? 'F' : 'N') + v;
+    if (fcache.hasOwnProperty(key)) return fcache[key];
+    var r = tr(v), out = r == null ? v : r, keep = true;
+    if (CYR.test(out)) {
+      var m = /^(\s*)([\s\S]*?)(\s*)$/.exec(v);
+      if (free && r == null && MT.hasOwnProperty(m[2])) out = m[1] + MT[m[2]] + m[3];
+      else { if (free && r == null) { mtAsk(m[2]); keep = false; } out = latin(out, free); }
+    }
+    if (keep) { if (++fsize > 5000) { fcache = {}; fsize = 0; } fcache[key] = out; }
+    return out;
+  }
+  I.tr = function (s) { var r = fin(s, false); return r == null ? s : r; };
 
   // ---------- подмяна на екрана ----------
-  // данни, които не се превеждат: имена на обекти/улици, бележки, имената на шофьорите
-  var SKIP = '.st, #card .note, #binsWhere, #names, [data-lang], script, style';
+  var SKIP = '[data-lang], script, style';
+  var FREE = '.note, .tag, .ut';
   var ATTRS = ['title', 'aria-label', 'placeholder', 'alt'];
+  var ORIG = new WeakMap();   // текстът на български – за да се преведе пак, когато дойде машинният превод
   function doText(n) {
     var p = n.parentNode;
     if (!p || p.nodeType !== 1 || p.matches(SKIP)) return;
-    var v = n.nodeValue, r = tr(v);
-    if (r != null && r !== v) n.nodeValue = r;
+    var v = n.nodeValue;
+    if (!CYR.test(v)) return;
+    var r = fin(v, !!p.closest(FREE));
+    if (r != null && r !== v) { ORIG.set(n, v); n.nodeValue = r; }
   }
   function doAttr(e, a) {
     var v = e.getAttribute(a);
     if (!v || !CYR.test(v)) return;
-    var r = tr(v);
+    var r = fin(v, false);
     if (r != null && r !== v) e.setAttribute(a, r);
   }
   function doEl(e) { for (var i = 0; i < ATTRS.length; i++) doAttr(e, ATTRS[i]); }
@@ -465,6 +571,15 @@
     var w = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, FILTER), n;
     while ((n = w.nextNode())) { if (n.nodeType === 3) doText(n); else doEl(n); }
   }
+  // пак – с машинния превод, който току-що е дошъл
+  function again() {
+    if (!document.body) return;
+    var w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT), n;
+    while ((n = w.nextNode())) {
+      var o = ORIG.get(n); if (!o || !n.parentNode || !n.parentNode.closest(FREE)) continue;
+      var r = fin(o, true); if (r != null && r !== n.nodeValue) n.nodeValue = r;
+    }
+  }
   var mo = new MutationObserver(function (list) {
     for (var i = 0; i < list.length; i++) {
       var r = list[i];
@@ -475,5 +590,12 @@
   });
   mo.observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ATTRS });
   walk(document.documentElement);
-  document.addEventListener('DOMContentLoaded', function () { walk(document.documentElement); });
+  document.addEventListener('DOMContentLoaded', function () {
+    walk(document.documentElement);
+    // името под иконата на началния екран – на латиница
+    var mf = document.querySelector('link[rel="manifest"]');
+    if (mf) mf.setAttribute('href', mf.getAttribute('href').replace('manifest.webmanifest', 'manifest-en.webmanifest'));
+    var at = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+    if (at) at.setAttribute('content', 'Obhod');
+  });
 })();
